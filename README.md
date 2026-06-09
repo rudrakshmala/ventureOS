@@ -1,30 +1,56 @@
-# venture-os
+# VentureOS - Enterprise Multi-Agent Event-Driven Core
 
-Welcome to your new [Mastra](https://mastra.ai/) project! We're excited to see what you'll build.
+VentureOS is a powerful, autonomous Enterprise Multi-Agent Event-Driven Core built on the [Mastra](https://mastra.ai/) framework. It coordinates a massive 76-Agent Corporate Grid designed to orchestrate complex software development, sales, execution, and security workflows entirely autonomously. 
 
-## Getting Started
+## Detailed Overview
 
-Start the development server:
+VentureOS functions as a complete corporate hierarchy in software form. The system is designed to simulate a functioning tech enterprise with dedicated departments:
+- **Core Business & Sales (14 Agents)**: Handles market scouting, lead profiling, pitch crafting, following up, closing deals, and generating revenue trackers.
+- **Executive Strategy Core (3 Agents)**: Comprises the CEO, COO, and CAO agents providing top-level directives and strategy.
+- **Product & Requirements Guild (7 Agents)**: Features Product Managers, Market Analysts, and UX designers who generate BRDs, user stories, and map edge cases.
+- **Core Software Engineering (15 Agents)**: A full-stack engineering team including frontend/backend specialists, API integrators, DB designers, and state management engineers.
+- **Quality Assurance & Verification Matrix (10 Agents)**: Ensures stability with QA agents, bug hunters, performance optimizers, and chaos engineering testers.
+- **DevOps & Infrastructure Fleet (8 Agents)**: Manages CI/CD, Kubernetes orchestration, Dockerfile creation, and infrastructure as code.
+- **Cybersecurity & Hardening Vanguard (10 Agents)**: Secures the application against vulnerabilities, SQL injections, secret leaks, and performs zero-trust architecture.
+- **Self-Healing Automation Core (7 Agents)**: Specialized agents that monitor loop breaks, resolve memory leaks/deadlocks, and propose refactoring when the system detects runtime errors.
 
-```shell
-npm run dev
-```
+VentureOS uses an **Express.js API** integrated with **Prisma (LibSQL)** to persist workspaces and track the lifecycle of agent execution.
 
-Open [http://localhost:4111](http://localhost:4111) in your browser to access [Mastra Studio](https://mastra.ai/docs/studio/overview). It provides an interactive UI for building and testing your agents, along with a REST API that exposes your Mastra application as a local service. This lets you start building without worrying about integration right away.
+### Key Features
+- **Live Streaming Visual Telemetry Console**: A dashboard to dispatch corporate directives to the agent grid and stream their logs in real time.
+- **Workspace Vault Workbench**: View and audit the historical execution vault, browse generated code, inspect agent security audits, and trigger runtime execution of generated workspaces in isolated threads.
+- **Autonomous Healing**: When a compiled workspace fails to execute, the self-healing core intercepts the crash trace and re-prompts the coder agents up to 3 times to fix the errors autonomously.
 
-You can start editing files inside the `src/mastra` directory. The development server will automatically reload whenever you make changes.
+---
 
-## Learn more
+## Construction Step-by-Step
 
-To learn more about Mastra, visit our [documentation](https://mastra.ai/docs/). Your bootstrapped project includes example code for [agents](https://mastra.ai/docs/agents/overview), [tools](https://mastra.ai/docs/agents/using-tools), [workflows](https://mastra.ai/docs/workflows/overview), [scorers](https://mastra.ai/docs/evals/overview), and [observability](https://mastra.ai/docs/observability/overview).
+Here is a detailed breakdown of how this project was constructed:
 
-If you're new to AI agents, check out our [course](https://mastra.ai/learn) and [YouTube videos](https://youtube.com/@mastra-ai). You can also join our [Discord](https://discord.gg/BTYqqHKUrf) community to get help and share your projects.
+### Step 1: Project Initialization
+1. Bootstrapped the base framework using `mastra` to create the project scaffolding.
+2. Initialized `package.json` with necessary dependencies, including `@mastra/core`, `express`, `cors`, `@prisma/client`, `@libsql/client`, and `tsx` for running TypeScript.
 
-## Deploy to the Mastra platform
+### Step 2: Database Architecture (Prisma + LibSQL)
+1. Configured Prisma schema with an SQLite/LibSQL database to handle local persistence.
+2. Set up models for `Tenant`, `Project`, and `Audit` to track every directive, generated workspace, and the agent departmental audits.
 
-The [Mastra platform](https://projects.mastra.ai) provides two products for deploying and managing AI applications built with the Mastra framework:
+### Step 3: Agent Creation & Departmental Structure
+1. Within `src/mastra/agents`, we created 76 individual Mastra agents, each with specific instructions, roles, and connected tools.
+2. Grouped these agents into departments logically inside `src/mastra/index.ts`.
+3. Initialized the global `Mastra` container with the full 76-Agent Corporate Grid.
 
-- **Studio**: A hosted visual environment for testing agents, running workflows, and inspecting traces
-- **Server**: A production deployment target that runs your Mastra application as an API server
+### Step 4: The Express Telemetry & Orchestration Server
+1. Created `src/server.ts` to act as the primary interface to dispatch and monitor agents.
+2. Built the **Telemetry Console** (`/dashboard`) using Server-Sent Events (SSE) to stream live agent logs directly to the browser.
+3. Implemented a recursive directory walker (`walkDirectoryTree`) to serve generated codebase structures dynamically to the Vault UI.
+4. Built the **Vault Workbench** (`/vault`) for inspecting historical agent runs, downloading bundled code (`/api/v1/download-workspace`), and viewing agent execution states.
 
-Learn more in the [Mastra platform documentation](https://mastra.ai/docs/mastra-platform/overview).
+### Step 5: Isolated Testing Environment
+1. In `server.ts`, an isolated process spawner (`/api/v1/test-workspace`) was added using Node's `child_process`.
+2. This allows users to test the code generated by the agents securely without crashing the main VentureOS orchestration layer.
+3. Hooked up the self-healing workflow: If the child process crashes, the error logs are captured and fed back to the Coder Agent loop.
+
+### Step 6: Finalization & Scripts
+1. Added run scripts to `package.json` for starting the server (`npm run dev`) and testing the core pipelines (`npm run test-pipeline`).
+2. Configured TS environment to cleanly compile the sophisticated multi-agent network.

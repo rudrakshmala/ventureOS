@@ -1,0 +1,151 @@
+// 📄 prisma/schema.prisma — VentureOS Production Database Schema v2.0
+
+datasource db {
+  provider = "sqlite"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ─── CORE TENANT & PROJECT MODELS ───────────────────────────────────────────
+
+model Tenant {
+  id        String    @id
+  createdAt DateTime  @default(now())
+  projects  Project[]
+}
+
+model Project {
+  id                 String   @id @default(uuid())
+  tenantId           String
+  projectName        String
+  workspacePath      String
+  corporateDirective String
+  status             String   // "PENDING", "SUCCESS", "FAILED"
+  dealId             String?  @unique // Link to a signed business deal
+  testStdout         String?
+  testStderr         String?
+  healingAttempts    Int      @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  tenant             Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  audits             Audit[]
+  deal               Deal?    @relation(fields: [dealId], references: [id])
+}
+
+model Audit {
+  id            String   @id @default(uuid())
+  projectId     String
+  department    String
+  statusMessage String
+  savedFiles    String
+  metricsText   String
+  createdAt     DateTime @default(now())
+
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+// ─── BUSINESS INTELLIGENCE — LEAD MODELS ────────────────────────────────────
+
+model Lead {
+  id             String   @id @default(uuid())
+  source         String   // "reddit", "hackernews", "producthunt", "twitter"
+  sourceUrl      String?
+  authorUsername String
+  contactEmail   String?
+  postTitle      String
+  postContent    String
+  painPoint      String?  // AI-extracted core pain point
+  budgetSignal   String   @default("unknown") // "low","medium","high","unknown"
+  niche          String?  // "saas","ecommerce","ai","automation","web","mobile"
+  score          Int      @default(0)  // 0-100 opportunity score
+  status         String   @default("NEW") // "NEW","PITCHED","REPLIED","WON","LOST","IGNORED"
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  outreachCampaigns OutreachCampaign[]
+  deal              Deal?
+}
+
+// ─── SALES & OUTREACH MODELS ─────────────────────────────────────────────────
+
+model OutreachCampaign {
+  id        String    @id @default(uuid())
+  leadId    String
+  sequence  Int       @default(1) // 1=initial pitch, 2=day2 followup, 3=day5, 4=day10 final
+  subject   String
+  body      String
+  status    String    @default("DRAFT") // "DRAFT","SENT","DELIVERED","REPLIED","BOUNCED"
+  sentAt    DateTime?
+  repliedAt DateTime?
+  replyBody String?   // What the lead replied with
+  createdAt DateTime  @default(now())
+
+  lead      Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+}
+
+// ─── DEAL PIPELINE MODELS ────────────────────────────────────────────────────
+
+model Deal {
+  id          String    @id @default(uuid())
+  leadId      String    @unique
+  title       String
+  value       Float     @default(0)
+  currency    String    @default("USD")
+  status      String    @default("NEGOTIATING") // "NEGOTIATING","WON","LOST","DELIVERED","PAID"
+  proposalText String?  // The full proposal document sent to the client
+  closedAt    DateTime?
+  deliveredAt DateTime?
+  paidAt      DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  lead        Lead      @relation(fields: [leadId], references: [id])
+  invoices    Invoice[]
+  project     Project?
+}
+
+// ─── REVENUE MODELS ──────────────────────────────────────────────────────────
+
+model Invoice {
+  id          String    @id @default(uuid())
+  dealId      String
+  amount      Float
+  currency    String    @default("USD")
+  status      String    @default("UNPAID") // "UNPAID","SENT","PAID","OVERDUE"
+  dueDate     DateTime?
+  paidAt      DateTime?
+  invoiceText String    // Full formatted invoice content
+  createdAt   DateTime  @default(now())
+
+  deal        Deal      @relation(fields: [dealId], references: [id], onDelete: Cascade)
+}
+
+// ─── OPERATIONS & ANALYTICS MODELS ───────────────────────────────────────────
+
+model AgentRunLog {
+  id          String    @id @default(uuid())
+  runType     String    // "EMPIRE_CYCLE","SCOUT_RUN","PITCH_RUN","DELIVERY_RUN","REVENUE_SYNC"
+  status      String    @default("RUNNING") // "RUNNING","SUCCESS","FAILED"
+  leadsFound  Int       @default(0)
+  pitchesSent Int       @default(0)
+  dealsWon    Int       @default(0)
+  revenue     Float     @default(0)
+  logs        String    @default("")
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+}
+
+model GrowthInsight {
+  id           String   @id @default(uuid())
+  projectId    String?
+  winFactor    String?  // What contributed to a win
+  lossFactor   String?  // What caused a loss
+  bestNiche    String?  // Top performing niche this cycle
+  bestPlatform String?  // Top performing lead platform
+  avgDealValue Float    @default(0)
+  insights     String   // Full AI-generated analysis
+  createdAt    DateTime @default(now())
+}

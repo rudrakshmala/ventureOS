@@ -1,22 +1,29 @@
 {
   "name": "venture-os",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Enterprise Multi-Agent Event-Driven Core",
+  "main": "dist/server.js",
+  "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "mastra dev",
-    "build": "mastra build",
-    "start": "mastra start"
+    "dev:mastra": "mastra dev",
+    "dev:server": "tsx --no-cache src/server.ts",
+    "dev": "tsx --no-cache src/server.ts",
+    "build:mastra": "mastra build",
+    "build:server": "tsc",
+    "start:server": "node dist/server.js",
+    "test-pipeline": "tsx --no-cache test-run.ts",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "module",
   "engines": {
     "node": ">=22.13.0"
   },
   "dependencies": {
+    "@ai-sdk/groq": "^3.0.39",
+    "@ai-sdk/openai": "^3.0.68",
+    "@libsql/client": "^0.17.3",
     "@mastra/core": "^1.41.0",
     "@mastra/duckdb": "^1.4.1",
     "@mastra/evals": "^1.2.4",
@@ -24,11 +31,23 @@
     "@mastra/loggers": "^1.1.2",
     "@mastra/memory": "^1.20.2",
     "@mastra/observability": "^1.14.1",
+    "@prisma/adapter-libsql": "^7.8.0",
+    "@prisma/client": "^7.8.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "nodemailer": "^8.0.10",
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@types/archiver": "^8.0.0",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
     "@types/node": "^25.9.2",
+    "@types/nodemailer": "^8.0.0",
     "mastra": "^1.12.2",
+    "prisma": "^7.8.0",
+    "tsx": "^4.19.3",
     "typescript": "^6.0.3"
   }
 }
