@@ -36,13 +36,16 @@
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "imap-simple": "^5.1.0",
     "nodemailer": "^8.0.10",
+    "resend": "^6.12.4",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/archiver": "^8.0.0",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
+    "@types/imap-simple": "^4.2.10",
     "@types/node": "^25.9.2",
     "@types/nodemailer": "^8.0.0",
     "mastra": "^1.12.2",

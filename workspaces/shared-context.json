@@ -1,0 +1,35 @@
+{
+  "memoryBus": {
+    "status": "COMPLETED",
+    "files": [
+      "src/memory/bus.ts",
+      "src/memory/context-bridge.ts",
+      "src/memory/README.md",
+      "src/routes/memory.ts"
+    ]
+  },
+  "outreach": {
+    "status": "COMPLETED",
+    "files": [
+      "src/outreach/sources/apollo.ts",
+      "src/outreach/sources/csv.ts",
+      "src/outreach/sources/index.ts",
+      "src/outreach/email/sender.ts",
+      "src/outreach/email/templates.ts",
+      "src/outreach/email/personalizer.ts",
+      "src/outreach/inbox/monitor.ts",
+      "src/outreach/pipeline.ts",
+      "src/routes/outreach.ts"
+    ]
+  },
+  "dashboard": {
+    "status": "COMPLETED",
+    "files": [
+      "workspaces/dashboard/src/app/page.tsx",
+      "workspaces/dashboard/src/components/AgentGrid.tsx",
+      "workspaces/dashboard/src/components/LiveFeed.tsx",
+      "workspaces/dashboard/src/components/MemoryViewer.tsx",
+      "workspaces/dashboard/src/components/OutreachPanel.tsx"
+    ]
+  }
+}

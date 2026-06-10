@@ -117,4 +117,8 @@ export const mastra = new Mastra({
   },
 });
 
+import { initMemoryBridge } from '../memory/context-bridge.js';
+// Fire and forget initialization
+initMemoryBridge().catch(console.error);
+
 console.log('🏢 [VentureOS] 76-Agent Corporate Grid registered in Mastra container');

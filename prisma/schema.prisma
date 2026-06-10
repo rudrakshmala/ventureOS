@@ -149,3 +149,15 @@ model GrowthInsight {
   insights     String   // Full AI-generated analysis
   createdAt    DateTime @default(now())
 }
+
+// ─── INTER-AGENT MEMORY BUS ──────────────────────────────────────────────────
+
+model MemoryBus {
+  id        String   @id @default(uuid())
+  agentId   String
+  key       String
+  value     String
+  scope     String   @default("global")
+  createdAt DateTime @default(now())
+  ttl       Int?
+}

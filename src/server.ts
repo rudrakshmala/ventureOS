@@ -21,10 +21,13 @@ const PORT = process.env.PORT || 4000;
 app.use(cors());
 app.use(express.json());
 
-/**
- * 📁 DEEP RECURSIVE DIRECTORY WALKER
- * Securely explores nested workspace architecture to render comprehensive file maps
- */
+// Add our new additive layers
+import { memoryRouter } from './routes/memory.js';
+import { outreachRouter } from './routes/outreach.js';
+
+app.use('/api/v1', memoryRouter);
+app.use('/api/v1', outreachRouter);
+
 const walkDirectoryTree = (dirPath: string, rootDir: string, fileList: any[] = []) => {
   if (!fs.existsSync(dirPath)) return fileList;
   const files = fs.readdirSync(dirPath);
