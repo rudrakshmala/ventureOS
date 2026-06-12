@@ -8,8 +8,10 @@
     "dev:mastra": "mastra dev",
     "dev:server": "tsx --no-cache src/server.ts",
     "dev": "tsx --no-cache src/server.ts",
+    "build": "tsc",
     "build:mastra": "mastra build",
     "build:server": "tsc",
+    "start": "node dist/server.js",
     "start:server": "node dist/server.js",
     "test-pipeline": "tsx --no-cache test-run.ts",
     "test": "echo \"Error: no test specified\" && exit 1"

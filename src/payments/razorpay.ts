@@ -57,7 +57,7 @@ export async function createPaymentLink(
       return null
     }
 
-    const data: RazorpayOrderResponse = await response.json()
+    const data = await response.json() as RazorpayOrderResponse
     return {
       paymentUrl: data.short_url || `https://rzp.io/${data.id}`,
       orderId: data.id

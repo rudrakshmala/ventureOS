@@ -46,7 +46,7 @@ export async function searchLeads(filters: ApolloSearchFilter, maxResults = 25):
     return []
   }
 
-  const data = await response.json()
+  const data = await response.json() as { people?: any[] }
   return (data.people || []).map((p: any) => ({
     email: p.email,
     firstName: p.first_name,

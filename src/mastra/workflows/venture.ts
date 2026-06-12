@@ -3,7 +3,7 @@ import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { z } from 'zod';
 import * as fs from 'fs';
 import * as path from 'path';
-import { resilientGenerate } from '../services/aiEngine'; // Import our new resilient handler
+import { resilientGenerate } from '../services/aiEngine.js'; // Import our new resilient handler
 
 const generationStep = createStep({
   id: 'generation-step',
