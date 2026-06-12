@@ -161,3 +161,81 @@ model MemoryBus {
   createdAt DateTime @default(now())
   ttl       Int?
 }
+
+model AgentMemory {
+  id        String   @id @default(cuid())
+  agentId   String
+  key       String
+  value     String   // JSON string
+  scope     String   // 'global' | 'sales' | 'engineering' | 'devops' | 'security' | 'qa' | 'executive'
+  ttl       Int?     // seconds until expiry, null = permanent
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([scope, key])
+  @@index([agentId])
+  @@map("agent_memory")
+}
+
+model EmailQuota {
+  id        String   @id @default(cuid())
+  date      String   // YYYY-MM-DD
+  sent      Int      @default(0)
+  maxDaily  Int      @default(100)
+  createdAt DateTime @default(now())
+
+  @@unique([date])
+  @@map("email_quota")
+}
+
+model SalesLead {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  name        String?
+  company     String?
+  title       String?
+  linkedinUrl String?
+  source      String   // 'apollo' | 'csv' | 'manual'
+  status      String   @default("sourced")
+  // sourced -> emailed -> follow_up_1 -> follow_up_2 -> replied -> closed_won -> closed_lost
+  painPoint   String?
+  pitchSent   String?  // the actual email content sent
+  repliedAt   DateTime?
+  replyPreview String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([status])
+  @@map("sales_leads")
+}
+
+model SalesProject {
+  id          String   @id @default(cuid())
+  clientEmail String
+  clientName  String?
+  brief       String   // what the client wants built
+  status      String   @default("intake")
+  // intake -> scoping -> building -> qa -> deploying -> delivered -> paid
+  priceQuoted Int?     // in INR paise (smallest unit)
+  paidAmount  Int?
+  workspaceId String?
+  deployedUrl String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("sales_projects")
+}
+
+model Payment {
+  id              String   @id @default(cuid())
+  projectId       String
+  razorpayOrderId String?
+  razorpayPaymentId String?
+  amount          Int      // in INR paise
+  status          String   @default("pending")
+  // pending -> paid -> refunded -> failed
+  type            String   // '50_upfront' | '50_completion' | 'full'
+  createdAt       DateTime @default(now())
+
+  @@map("payments")
+}

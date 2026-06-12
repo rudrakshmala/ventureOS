@@ -10,6 +10,9 @@ import archiver from 'archiver'; // 📦 Ensure you run: npm install archiver @t
 import { runMNCCorporateGrid } from './mastra/services/mncOrchestrator.js';
 import { runAutonomousEmpireCycle, runScoutOnly } from './mastra/services/autonomousEmpireOrchestrator.js';
 import { prisma } from './db.js'; // 💾 Centralized relational database connection
+import { startReplyMonitor } from './outreach/inbox/monitor.js'
+import { OutreachPipeline } from './outreach/pipeline.js'
+import { memoryBus } from './memory/index.js'
 
 // Initialize configuration layers early
 dotenv.config();
@@ -22,11 +25,9 @@ app.use(cors());
 app.use(express.json());
 
 // Add our new additive layers
-import { memoryRouter } from './routes/memory.js';
-import { outreachRouter } from './routes/outreach.js';
+app.use(express.static(path.join(process.cwd(), 'workspaces/landing')));
 
-app.use('/api/v1', memoryRouter);
-app.use('/api/v1', outreachRouter);
+
 
 const walkDirectoryTree = (dirPath: string, rootDir: string, fileList: any[] = []) => {
   if (!fs.existsSync(dirPath)) return fileList;
@@ -959,6 +960,152 @@ app.get('/api/v1/empire/run-cycle', async (req, res) => {
   }
 });
 
+// ═══════════════════════════════════════
+// PAYMENT ROUTES — append to server.ts
+// ═══════════════════════════════════════
+
+// PAYMENT: Client intake form — this is how projects start
+app.post('/api/v1/intake', async (req, res) => {
+  try {
+    const { email, name, company, brief, budget } = req.body
+    if (!email || !brief) return res.status(400).json({ error: 'email and brief are required' })
+
+    const project = await prisma.salesProject.create({
+      data: { clientEmail: email, clientName: name ?? null, brief, status: 'intake' }
+    })
+
+    // Best-effort memory write — don't fail the response if this errors
+    try {
+      const { memoryBus } = await import('./memory/index.js')
+      await memoryBus.setProjectContext(project.id, { email, name, company, brief, budget, status: 'intake' })
+    } catch (memErr) {
+      console.warn('[MemoryBus] setProjectContext failed (non-fatal):', memErr)
+    }
+
+    res.json({ projectId: project.id, message: 'Brief received - we will be in touch within 2 hours' })
+  } catch (err: any) {
+    console.error('[intake] Error:', err)
+    res.status(500).json({ error: 'Internal server error. Please try again.' })
+  }
+})
+
+
+// PAYMENT: Generate payment link for a project
+app.post('/api/v1/payments/create', async (req, res) => {
+  const { projectId, amount } = req.body
+  const project = await prisma.salesProject.findUnique({ where: { id: projectId } })
+  if (!project) return res.status(404).json({ error: 'Project not found' })
+
+  const { createPaymentLink } = await import('./payments/razorpay.js')
+  const result = await createPaymentLink(
+    Math.floor(amount / 2),  // 50% upfront
+    projectId,
+    project.clientEmail,
+    project.brief.substring(0, 100)
+  )
+
+  if (!result) return res.status(500).json({ error: 'Payment link creation failed' })
+
+  await prisma.payment.create({
+    data: {
+      projectId,
+      razorpayOrderId: result.orderId,
+      amount: Math.floor(amount / 2) * 100,
+      status: 'pending',
+      type: '50_upfront'
+    }
+  })
+
+  res.json({ paymentUrl: result.paymentUrl, orderId: result.orderId })
+})
+
+// PAYMENT: Razorpay webhook — fires when payment succeeds
+app.post('/api/v1/payments/webhook', async (req, res) => {
+  const { verifyWebhookSignature } = await import('./payments/razorpay.js')
+  const signature = req.headers['x-razorpay-signature'] as string
+  
+  if (!verifyWebhookSignature(JSON.stringify(req.body), signature)) {
+    return res.status(400).json({ error: 'Invalid signature' })
+  }
+
+  const { event, payload } = req.body
+  
+  if (event === 'payment_link.paid') {
+    const orderId = payload.payment_link?.entity?.id
+    const payment = await prisma.payment.findFirst({ where: { razorpayOrderId: orderId } })
+    
+    if (payment) {
+      await prisma.payment.update({ where: { id: payment.id }, data: { status: 'paid' } })
+      await prisma.salesProject.update({ where: { id: payment.projectId }, data: { status: 'scoping', paidAmount: payment.amount } })
+      
+      // Trigger the 76-agent delivery machine
+      const { memoryBus } = await import('./memory/index.js')
+      await memoryBus.write('payment', `paid:${payment.projectId}`, { paid: true, amount: payment.amount }, 'global')
+      console.log(`[Payment] 💰 Payment received for project ${payment.projectId}`)
+    }
+  }
+  
+  res.json({ received: true })
+})
+
+// Unsubscribe endpoint — required for CAN-SPAM compliance
+app.get('/api/v1/unsubscribe', async (req, res) => {
+  const { email } = req.query
+  if (email) {
+    await prisma.salesLead.updateMany({
+      where: { email: email as string },
+      data: { status: 'closed_lost' }
+    })
+  }
+  res.send('<html><body><h2>You have been unsubscribed.</h2></body></html>')
+})
+
+// Memory bus API — consumed by dashboard
+app.get('/api/v1/memory/:scope', async (req, res) => {
+  const { memoryBus } = await import('./memory/index.js')
+  const scope = req.params.scope as any
+  const data = await memoryBus.readScope(scope)
+  res.json(data)
+})
+
+// Outreach stats — consumed by dashboard
+app.get('/api/v1/outreach/stats', async (req, res) => {
+  const stats = await prisma.salesLead.groupBy({
+    by: ['status'],
+    _count: { status: true }
+  })
+  const formatted = Object.fromEntries(stats.map(s => [s.status, s._count.status]))
+  res.json(formatted)
+})
+
+// Start outreach pipeline manually (for testing)
+app.post('/api/v1/outreach/start', async (req, res) => {
+  const { OutreachPipeline } = await import('./outreach/pipeline.js')
+  const pipeline = new OutreachPipeline(prisma)
+  pipeline.runDailyCycle()
+  res.json({ message: 'Pipeline started' })
+})
+
+// SSE stream for real-time dashboard updates
+app.get('/api/v1/stream', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream')
+  res.setHeader('Cache-Control', 'no-cache')
+  res.setHeader('Connection', 'keep-alive')
+  res.setHeader('Access-Control-Allow-Origin', '*')
+
+  const send = (data: object) => res.write(`data: ${JSON.stringify(data)}\n\n`)
+  
+  send({ type: 'connected', timestamp: new Date().toISOString() })
+
+  const interval = setInterval(async () => {
+    const stats = await prisma.salesLead.groupBy({ by: ['status'], _count: { status: true } })
+    const formatted = Object.fromEntries(stats.map(s => [s.status, s._count.status]))
+    send({ type: 'stats_update', data: formatted, timestamp: new Date().toISOString() })
+  }, 10000)
+
+  req.on('close', () => clearInterval(interval))
+})
+
 // Wake up the VentureOS Engine Grid
 app.listen(PORT, async () => {
   console.log(`🏢 [VentureOS SaaS Core] Active and compiling on port ${PORT}`);
@@ -970,4 +1117,20 @@ app.listen(PORT, async () => {
   try {
     await prisma.project.updateMany({ where: { status: 'PENDING' }, data: { status: 'FAILED' } });
   } catch (err) {}
+
+  // Start reply monitoring
+  startReplyMonitor(prisma as any)
+
+  // Start outreach pipeline scheduler
+  const pipeline = new OutreachPipeline(prisma as any)
+  pipeline.startScheduler()
+
+  console.log(`
+╔═══════════════════════════════════════════════╗
+║           VentureOS is running                ║
+║   Express:   http://localhost:${PORT}           ║
+║   Dashboard: http://localhost:3001             ║
+║   Landing:   http://localhost:${PORT}           ║
+╚═══════════════════════════════════════════════╝
+  `)
 });

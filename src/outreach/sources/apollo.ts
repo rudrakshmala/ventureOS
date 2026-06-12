@@ -1,127 +1,58 @@
-// 📄 src/outreach/sources/apollo.ts — Apollo.io API client for lead sourcing
-import dotenv from 'dotenv';
-dotenv.config();
+// Apollo.io API client — 50 free credits/month
+// Docs: https://apolloio.github.io/apollo-api-docs/
 
-const APOLLO_BASE = 'https://api.apollo.io/v1';
-const APOLLO_API_KEY = process.env.APOLLO_API_KEY || '';
-
-export interface ApolloLead {
-  id: string;
-  firstName: string;
-  lastName: string;
-  email: string;
-  company: string;
-  title: string;
-  linkedinUrl?: string;
-  industry?: string;
-  companySize?: string;
-  location?: string;
+interface ApolloSearchFilter {
+  titles?: string[]          // e.g. ['CTO', 'Founder', 'CEO']
+  keywords?: string[]        // industry keywords
+  location?: string[]        // e.g. ['Mumbai', 'Bangalore', 'Delhi']
+  companySizes?: string[]    // e.g. ['1,10', '11,50']
 }
 
-export interface ApolloSearchFilters {
-  personTitles?: string[];
-  industries?: string[];
-  employeeRanges?: string[];
-  locations?: string[];
-  keywords?: string[];
-  limit?: number;
+interface ApolloContact {
+  email: string
+  firstName: string
+  lastName: string
+  title: string
+  company: string
+  linkedinUrl?: string
 }
 
-export class ApolloClient {
-  private apiKey: string;
-
-  constructor(apiKey?: string) {
-    this.apiKey = apiKey || APOLLO_API_KEY;
+export async function searchLeads(filters: ApolloSearchFilter, maxResults = 25): Promise<ApolloContact[]> {
+  const apiKey = process.env.APOLLO_API_KEY
+  if (!apiKey) {
+    console.warn('[Apollo] No API key — falling back to CSV source')
+    return []
   }
 
-  isConfigured(): boolean {
-    return this.apiKey.length > 0;
+  const response = await fetch('https://api.apollo.io/v1/mixed_people/search', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-cache',
+      'X-Api-Key': apiKey
+    },
+    body: JSON.stringify({
+      q_organization_keyword_tags: filters.keywords || ['startup', 'saas', 'technology'],
+      person_titles: filters.titles || ['Founder', 'CEO', 'CTO', 'Head of Engineering'],
+      person_locations: filters.location || ['Mumbai', 'Bangalore', 'Delhi', 'Pune', 'Hyderabad'],
+      organization_num_employees_ranges: filters.companySizes || ['1,10', '11,50'],
+      page: 1,
+      per_page: maxResults
+    })
+  })
+
+  if (!response.ok) {
+    console.error('[Apollo] Search failed:', response.status, await response.text())
+    return []
   }
 
-  async searchPeople(filters: ApolloSearchFilters): Promise<ApolloLead[]> {
-    if (!this.isConfigured()) {
-      throw new Error('APOLLO_API_KEY not set');
-    }
-
-    try {
-      const response = await fetch(`${APOLLO_BASE}/mixed_people/search`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Cache-Control': 'no-cache',
-          'X-Api-Key': this.apiKey,
-        },
-        body: JSON.stringify({
-          person_titles: filters.personTitles || ['CTO', 'CEO', 'Founder', 'VP Engineering'],
-          person_locations: filters.locations || [],
-          organization_industry_tag_ids: filters.industries || [],
-          organization_num_employees_ranges: filters.employeeRanges || ['1,50', '51,200'],
-          q_keywords: filters.keywords?.join(' ') || 'saas startup',
-          per_page: filters.limit || 25,
-          page: 1,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Apollo API error ${response.status}: ${errorText}`);
-      }
-
-      const data = await response.json();
-      const people = data.people || [];
-
-      return people.map((p: any) => ({
-        id: p.id,
-        firstName: p.first_name || '',
-        lastName: p.last_name || '',
-        email: p.email || '',
-        company: p.organization?.name || '',
-        title: p.title || '',
-        linkedinUrl: p.linkedin_url || '',
-        industry: p.organization?.industry || '',
-        companySize: p.organization?.estimated_num_employees?.toString() || '',
-        location: `${p.city || ''}, ${p.country || ''}`.trim(),
-      }));
-    } catch (error: any) {
-      console.error('🔴 [Apollo] Search failed:', error.message);
-      throw error;
-    }
-  }
-
-  async enrichPerson(email: string): Promise<ApolloLead | null> {
-    if (!this.isConfigured()) return null;
-
-    try {
-      const response = await fetch(`${APOLLO_BASE}/people/match`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Api-Key': this.apiKey,
-        },
-        body: JSON.stringify({ email }),
-      });
-
-      if (!response.ok) return null;
-      const data = await response.json();
-      const p = data.person;
-      if (!p) return null;
-
-      return {
-        id: p.id,
-        firstName: p.first_name || '',
-        lastName: p.last_name || '',
-        email: p.email || email,
-        company: p.organization?.name || '',
-        title: p.title || '',
-        linkedinUrl: p.linkedin_url || '',
-        industry: p.organization?.industry || '',
-        companySize: p.organization?.estimated_num_employees?.toString() || '',
-        location: `${p.city || ''}, ${p.country || ''}`.trim(),
-      };
-    } catch {
-      return null;
-    }
-  }
+  const data = await response.json()
+  return (data.people || []).map((p: any) => ({
+    email: p.email,
+    firstName: p.first_name,
+    lastName: p.last_name,
+    title: p.title,
+    company: p.organization?.name || '',
+    linkedinUrl: p.linkedin_url
+  })).filter((c: ApolloContact) => c.email && !c.email.includes('email_not_found'))
 }
-
-export const apolloClient = new ApolloClient();

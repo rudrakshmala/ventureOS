@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VentureOS — AI Software Studio</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0A0A0F; color: #F0EFF8; font-family: system-ui, sans-serif; }
+  .hero { max-width: 680px; margin: 0 auto; padding: 80px 24px; }
+  h1 { font-size: 42px; font-weight: 700; line-height: 1.15; margin-bottom: 20px; }
+  h1 span { color: #6366F1; }
+  p.sub { font-size: 18px; color: #9896A8; line-height: 1.6; margin-bottom: 40px; }
+  .cta { display: inline-block; background: #6366F1; color: white; padding: 16px 32px; border-radius: 10px; font-weight: 600; font-size: 16px; text-decoration: none; }
+  .trust { display: flex; gap: 32px; margin-top: 60px; }
+  .trust-item p { font-size: 24px; font-weight: 700; color: #F0EFF8; }
+  .trust-item span { font-size: 12px; color: #9896A8; }
+  form { margin-top: 48px; display: flex; flex-direction: column; gap: 12px; max-width: 480px; }
+  input, textarea {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px;
+    padding: 12px 16px;
+    color: #F0EFF8;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  input:focus, textarea:focus { border-color: #6366F1; }
+  textarea { min-height: 100px; resize: vertical; }
+  input::placeholder, textarea::placeholder { color: #9896A8; }
+  button {
+    background: #6366F1;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 14px 24px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+  button:disabled { opacity: 0.6; cursor: not-allowed; }
+  .price { margin-top: 48px; }
+  .price h2 { font-size: 22px; margin-bottom: 16px; }
+  .price-card {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 12px;
+  }
+  .price-card strong { color: #6366F1; font-size: 22px; }
+  #formMsg { font-size: 13px; display: none; margin-top: 4px; }
+  #formMsg.success { color: #10B981; }
+  #formMsg.error { color: #EF4444; }
+</style>
+</head>
+<body>
+<div class="hero">
+  <h1>Ship your product in <span>72 hours</span>.<br>Not 6 months.</h1>
+  <p class="sub">VentureOS is an AI-powered software studio. You describe what you want built. We deliver a working, deployed product — fast and affordably.</p>
+  <a href="#contact" class="cta">Submit your project brief →</a>
+
+  <div class="trust">
+    <div class="trust-item"><p>76</p><span>AI agents building your product</span></div>
+    <div class="trust-item"><p>72h</p><span>Average delivery time</span></div>
+    <div class="trust-item"><p>50%</p><span>Upfront, 50% on delivery</span></div>
+  </div>
+
+  <div class="price" id="pricing">
+    <h2>Straightforward pricing</h2>
+    <div class="price-card">
+      <strong>₹15,000 – ₹25,000</strong>
+      <p style="margin-top:8px;color:#9896A8">Landing page or simple web app — delivered in 48 hours</p>
+    </div>
+    <div class="price-card">
+      <strong>₹35,000 – ₹60,000</strong>
+      <p style="margin-top:8px;color:#9896A8">Dashboard, admin panel, or data tool — 4–5 days</p>
+    </div>
+    <div class="price-card">
+      <strong>₹80,000 – ₹1,50,000</strong>
+      <p style="margin-top:8px;color:#9896A8">Full SaaS MVP with auth, database, and deployment — 2 weeks</p>
+    </div>
+  </div>
+
+  <div id="contact" style="margin-top:48px">
+    <h2 style="font-size:22px;margin-bottom:8px">Tell us what you need</h2>
+    <p style="color:#9896A8;font-size:14px;margin-bottom:20px">We reply within 2 hours with a quote and timeline.</p>
+    <form id="briefForm">
+      <input type="email" placeholder="Your email *" required id="clientEmail">
+      <input type="text" placeholder="Your name" id="clientName">
+      <input type="text" placeholder="Company (optional)" id="clientCompany">
+      <textarea placeholder="Describe what you want built. The more detail, the better. *" required id="projectBrief"></textarea>
+      <button type="submit" id="submitBtn">Send brief →</button>
+      <p id="formMsg"></p>
+    </form>
+  </div>
+</div>
+
+<script>
+document.getElementById('briefForm').addEventListener('submit', async function(e) {
+  e.preventDefault();
+
+  var btn = document.getElementById('submitBtn');
+  var msg = document.getElementById('formMsg');
+  var email = document.getElementById('clientEmail').value.trim();
+  var brief = document.getElementById('projectBrief').value.trim();
+
+  if (!email || !brief) {
+    msg.className = 'error';
+    msg.textContent = 'Please fill in your email and project description.';
+    msg.style.display = 'block';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Sending...';
+  msg.style.display = 'none';
+
+  var data = {
+    email: email,
+    name: document.getElementById('clientName').value.trim(),
+    company: document.getElementById('clientCompany').value.trim(),
+    brief: brief
+  };
+
+  try {
+    var r = await fetch('/api/v1/intake', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    var json = await r.json();
+    if (r.ok) {
+      msg.className = 'success';
+      msg.textContent = 'Brief received! We will reply within 2 hours.';
+      msg.style.display = 'block';
+      document.getElementById('briefForm').reset();
+    } else {
+      msg.className = 'error';
+      msg.textContent = 'Error: ' + (json.error || 'Something went wrong. Please try again.');
+      msg.style.display = 'block';
+    }
+  } catch (err) {
+    msg.className = 'error';
+    msg.textContent = 'Network error. Please try again or email us directly.';
+    msg.style.display = 'block';
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Send brief →';
+});
+</script>
+</body>
+</html>

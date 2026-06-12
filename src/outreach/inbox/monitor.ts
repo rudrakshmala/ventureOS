@@ -1,134 +1,117 @@
-// 📄 src/outreach/inbox/monitor.ts — IMAP Inbox Monitor for Replies
-import imap from 'imap-simple';
-import { createClient } from '@libsql/client';
-import { memoryBus } from '../../memory/bus.js';
-import dotenv from 'dotenv';
-dotenv.config();
+import imaps from 'imap-simple'
+import { PrismaClient } from '@prisma/client'
+import { memoryBus } from '../../memory/index.js'
 
-const IMAP_HOST = process.env.IMAP_HOST || 'imap.gmail.com';
-const IMAP_USER = process.env.IMAP_USER || '';
-const IMAP_PASS = process.env.IMAP_PASS || '';
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
-const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || '';
-
-const db = createClient({ url: 'file:./venture_core.db' });
-
-export class InboxMonitor {
-  private config = {
+// Polls inbox every 5 minutes for replies
+// When a reply is found: updates DB, writes to MemoryBus, notifies you via Telegram
+export async function startReplyMonitor(prisma: PrismaClient): Promise<void> {
+  const config = {
     imap: {
-      user: IMAP_USER,
-      password: IMAP_PASS,
-      host: IMAP_HOST,
+      user: process.env.IMAP_USER || '',
+      password: process.env.IMAP_PASS || '',
+      host: process.env.IMAP_HOST || 'imap.gmail.com',
       port: 993,
       tls: true,
-      authTimeout: 3000,
-      tlsOptions: { rejectUnauthorized: false }
+      tlsOptions: { rejectUnauthorized: false },
+      authTimeout: 10000
     }
-  };
-  
-  private isConfigured(): boolean {
-    return IMAP_USER.length > 0 && IMAP_PASS.length > 0;
   }
 
-  async checkInbox(): Promise<number> {
-    if (!this.isConfigured()) {
-      console.warn('⚠️ [InboxMonitor] IMAP credentials not configured. Skipping inbox check.');
-      return 0;
-    }
+  if (!config.imap.user || !config.imap.password) {
+    console.warn('[ReplyMonitor] IMAP credentials not configured — reply detection disabled')
+    return
+  }
 
+  const checkInbox = async () => {
     try {
-      console.log('📥 [InboxMonitor] Connecting to IMAP server...');
-      const connection = await imap.connect(this.config);
-      await connection.openBox('INBOX');
+      const connection = await imaps.connect(config)
+      await connection.openBox('INBOX')
 
-      // Search for unread emails from the last 24 hours
-      const delay = 24 * 3600 * 1000;
-      const yesterday = new Date(Date.now() - delay).toISOString();
-      const searchCriteria = ['UNSEEN', ['SINCE', yesterday]];
+      // Look for unseen messages from the last 24 hours
+      const since = new Date()
+      since.setDate(since.getDate() - 1)
+
+      const searchCriteria = ['UNSEEN', ['SINCE', since]]
+      const fetchOptions = { bodies: ['HEADER.FIELDS (FROM SUBJECT DATE)', 'TEXT'], markSeen: false }
+
+      const messages = await connection.search(searchCriteria, fetchOptions)
       
-      const fetchOptions = { bodies: ['HEADER.FIELDS (FROM TO SUBJECT DATE)', 'TEXT'], markSeen: true };
-      const messages = await connection.search(searchCriteria, fetchOptions);
-
-      console.log(`📥 [InboxMonitor] Found ${messages.length} unread messages.`);
-      
-      let replyCount = 0;
-
-      for (const item of messages) {
-        const header = item.parts.find((p: any) => p.which === 'HEADER.FIELDS (FROM TO SUBJECT DATE)');
-        const body = item.parts.find((p: any) => p.which === 'TEXT');
+      for (const message of messages) {
+        const header = message.parts.find((p: any) => p.which === 'HEADER.FIELDS (FROM SUBJECT DATE)')
+        const body = message.parts.find((p: any) => p.which === 'TEXT')
         
-        if (!header || !body) continue;
+        if (!header) continue
 
-        const from = header.body.from?.[0] || '';
-        const subject = header.body.subject?.[0] || '';
+        const fromHeader = header.body?.from?.[0] || ''
+        const subjectHeader = header.body?.subject?.[0] || ''
         
-        // Extract email address
-        const emailMatch = from.match(/<(.+)>/);
-        const email = emailMatch ? emailMatch[1] : from;
+        // Extract email from "Name <email>" format
+        const emailMatch = fromHeader.match(/<([^>]+)>/) || [null, fromHeader]
+        const senderEmail = emailMatch[1]?.toLowerCase()
 
-        // Verify if this is a lead in our system
-        const leadRes = await db.execute({
-          sql: 'SELECT * FROM Lead WHERE contactEmail = ?',
-          args: [email]
-        });
+        if (!senderEmail) continue
 
-        if (leadRes.rows.length > 0) {
-          const lead = leadRes.rows[0];
+        // Check if this is a reply from one of our leads
+        const lead = await prisma.salesLead.findUnique({ where: { email: senderEmail } })
+        
+        if (lead && lead.status !== 'replied' && lead.status !== 'closed_won') {
+          const preview = body?.body?.substring(0, 200) || ''
           
-          console.log(`🔥 [InboxMonitor] Hot Reply Detected from ${email}!`);
+          // Update lead status
+          await prisma.salesLead.update({
+            where: { email: senderEmail },
+            data: {
+              status: 'replied',
+              repliedAt: new Date(),
+              replyPreview: preview
+            }
+          })
+
+          // Broadcast to memory bus — engineering & executive can see hot leads
+          await memoryBus.promoteLead(lead.id, {
+            email: senderEmail,
+            name: lead.name,
+            company: lead.company,
+            subject: subjectHeader,
+            preview,
+            repliedAt: new Date().toISOString()
+          })
+
+          // Send Telegram notification to you immediately
+          await notifyTelegram(`🔥 REPLY FROM ${lead.name || senderEmail} (${lead.company || 'Unknown Co'})\n\nSubject: ${subjectHeader}\n\nPreview: ${preview.substring(0, 150)}...`)
           
-          // 1. Update Lead Status in DB
-          await db.execute({
-            sql: 'UPDATE Lead SET status = ? WHERE id = ?',
-            args: ['REPLIED', lead.id]
-          });
-          
-          await db.execute({
-            sql: 'UPDATE OutreachCampaign SET status = ?, repliedAt = ?, replyBody = ? WHERE leadId = ? AND status = ?',
-            args: ['REPLIED', new Date().toISOString(), body.body, lead.id, 'SENT']
-          });
-
-          // 2. Write to Memory Bus
-          await memoryBus.write('inboxMonitor', `hot_lead_${lead.id}`, {
-            id: lead.id,
-            email: lead.contactEmail,
-            name: lead.authorUsername,
-            company: lead.authorUsername, // Mapping approximation
-            subject,
-            body: body.body
-          }, 'sales');
-
-          // 3. Send Telegram Notification
-          await this.notifyTelegram(`🔥 HOT LEAD REPLY!\nFrom: ${email}\nSubject: ${subject}\n\nLogin to VentureOS Dashboard to view.`);
-
-          replyCount++;
+          console.log(`[ReplyMonitor] 🎯 Reply detected from ${senderEmail}`)
         }
       }
 
-      connection.end();
-      return replyCount;
-      
-    } catch (error: any) {
-      console.error('🔴 [InboxMonitor] IMAP error:', error.message);
-      return 0;
+      connection.end()
+    } catch (err: any) {
+      console.error('[ReplyMonitor] Error:', err.message)
     }
   }
 
-  async notifyTelegram(message: string): Promise<void> {
-    if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) return;
-    try {
-      await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: TELEGRAM_CHAT_ID,
-          text: message
-        })
-      });
-    } catch (error) {
-      console.error('🔴 [InboxMonitor] Telegram notify failed:', error);
-    }
-  }
+  // Run immediately, then every 5 minutes
+  await checkInbox()
+  setInterval(checkInbox, 5 * 60 * 1000)
+  console.log('[ReplyMonitor] Started — checking every 5 minutes')
 }
 
-export const inboxMonitor = new InboxMonitor();
+async function notifyTelegram(message: string): Promise<void> {
+  const token = process.env.TELEGRAM_BOT_TOKEN
+  const chatId = process.env.TELEGRAM_CHAT_ID
+
+  if (!token || !chatId) {
+    console.log('[Telegram] Not configured — reply notification:', message)
+    return
+  }
+
+  try {
+    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text: message, parse_mode: 'HTML' })
+    })
+  } catch (err: any) {
+    console.error('[Telegram] Failed to send notification:', err.message)
+  }
+}

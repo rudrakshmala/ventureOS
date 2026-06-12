@@ -1,122 +1,87 @@
-// 📄 src/outreach/email/sender.ts — Email sending infrastructure using Resend
-import { Resend } from 'resend';
-import { createClient } from '@libsql/client';
-import dotenv from 'dotenv';
-dotenv.config();
+// EMAIL: All outgoing mail passes through this file. DO NOT bypass.
+import { Resend } from 'resend'
+import { PrismaClient } from '@prisma/client'
+import type { EmailTemplate } from './templates.js'
 
-const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
-const SENDING_DOMAIN = process.env.SENDING_DOMAIN || 'ventures.yourdomain.com';
-const DAILY_LIMIT = 100;
+const resend = new Resend(process.env.RESEND_API_KEY)
 
-const db = createClient({ url: 'file:./venture_core.db' });
-let dbInitialized = false;
+// EMAIL: Check and increment daily quota before ANY send
+export async function checkQuota(prisma: PrismaClient): Promise<{ allowed: boolean; used: number; max: number }> {
+  const today = new Date().toISOString().split('T')[0]  // YYYY-MM-DD
+  
+  const quota = await prisma.emailQuota.upsert({
+    where: { date: today },
+    create: { date: today, sent: 0, maxDaily: Number(process.env.EMAIL_DAILY_LIMIT || 100) },
+    update: {}
+  })
 
-async function initDb() {
-  if (dbInitialized) return;
-  await db.executeMultiple(`
-    CREATE TABLE IF NOT EXISTS email_quota (
-      date TEXT PRIMARY KEY,
-      sent_count INTEGER DEFAULT 0
-    );
-  `);
-  dbInitialized = true;
-}
-
-export class EmailSender {
-  private resend: Resend | null = null;
-
-  constructor() {
-    if (RESEND_API_KEY) {
-      this.resend = new Resend(RESEND_API_KEY);
-    } else {
-      console.warn('⚠️ [EmailSender] RESEND_API_KEY not configured. Running in mock mode.');
-    }
-  }
-
-  async checkQuota(): Promise<boolean> {
-    await initDb();
-    const today = new Date().toISOString().split('T')[0];
-    
-    // Ensure row exists
-    await db.execute({
-      sql: 'INSERT OR IGNORE INTO email_quota (date, sent_count) VALUES (?, 0)',
-      args: [today]
-    });
-
-    const res = await db.execute({
-      sql: 'SELECT sent_count FROM email_quota WHERE date = ?',
-      args: [today]
-    });
-
-    const sentCount = (res.rows[0]?.sent_count as number) || 0;
-    return sentCount < DAILY_LIMIT;
-  }
-
-  async incrementQuota(): Promise<void> {
-    await initDb();
-    const today = new Date().toISOString().split('T')[0];
-    await db.execute({
-      sql: 'UPDATE email_quota SET sent_count = sent_count + 1 WHERE date = ?',
-      args: [today]
-    });
-  }
-
-  async send(to: string, subject: string, html: string, fromName: string = 'Alex'): Promise<boolean> {
-    const hasQuota = await this.checkQuota();
-    if (!hasQuota) {
-      console.warn(`🔴 [EmailSender] Daily quota (${DAILY_LIMIT}) exhausted. Skipping send to ${to}`);
-      return false;
-    }
-
-    const fromAddress = `${fromName} <${fromName.toLowerCase()}@${SENDING_DOMAIN}>`;
-
-    console.log(`📧 [EmailSender] Sending email to ${to} (Subject: "${subject}")`);
-
-    if (!this.resend) {
-      // Mock mode
-      console.log(`   [Mock] Would have sent via Resend API from: ${fromAddress}`);
-      await this.incrementQuota();
-      return true;
-    }
-
-    try {
-      const { data, error } = await this.resend.emails.send({
-        from: fromAddress,
-        to,
-        subject,
-        html,
-      });
-
-      if (error) {
-        console.error('🔴 [EmailSender] Resend API error:', error);
-        return false;
-      }
-
-      await this.incrementQuota();
-      console.log(`✅ [EmailSender] Email sent successfully (ID: ${data?.id})`);
-      return true;
-    } catch (err: any) {
-      console.error('🔴 [EmailSender] Unexpected error during send:', err.message);
-      return false;
-    }
-  }
-
-  async sendBatch(emails: { to: string; subject: string; html: string; fromName?: string }[], delayMs: number = 2000): Promise<number> {
-    let sent = 0;
-    for (const email of emails) {
-      const success = await this.send(email.to, email.subject, email.html, email.fromName);
-      if (success) {
-        sent++;
-        if (delayMs > 0) {
-          await new Promise(resolve => setTimeout(resolve, delayMs));
-        }
-      } else {
-        // Stop batch if quota hit or major error
-        break;
-      }
-    }
-    return sent;
+  return {
+    allowed: quota.sent < quota.maxDaily,
+    used: quota.sent,
+    max: quota.maxDaily
   }
 }
 
-export const emailSender = new EmailSender();
+async function incrementQuota(prisma: PrismaClient): Promise<void> {
+  const today = new Date().toISOString().split('T')[0]
+  await prisma.emailQuota.update({
+    where: { date: today },
+    data: { sent: { increment: 1 } }
+  })
+}
+
+export interface SendResult {
+  success: boolean
+  messageId?: string
+  error?: string
+}
+
+// EMAIL: Primary send function — never call Resend directly, always use this
+export async function sendEmail(
+  prisma: PrismaClient,
+  to: string,
+  template: EmailTemplate,
+  leadId?: string
+): Promise<SendResult> {
+  const { allowed, used, max } = await checkQuota(prisma)
+  
+  if (!allowed) {
+    console.warn(`[Email] Daily quota reached (${used}/${max}). Skipping ${to}`)
+    return { success: false, error: 'quota_exceeded' }
+  }
+
+  const fromDomain = process.env.SENDING_DOMAIN || 'ventures.yourdomain.com'
+  const senderName = process.env.SENDER_NAME || 'Rudraksh'
+  const unsubscribeBase = process.env.APP_URL || 'http://localhost:3000'
+  const unsubscribeUrl = `${unsubscribeBase}/api/v1/unsubscribe?email=${encodeURIComponent(to)}&token=${Buffer.from(to).toString('base64')}`
+
+  const html = template.html.replace(/\{\{unsubscribeUrl\}\}/g, unsubscribeUrl)
+  const text = template.text.replace(/\{\{unsubscribeUrl\}\}/g, unsubscribeUrl)
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: `${senderName} <hello@${fromDomain}>`,
+      to: [to],
+      subject: template.subject,
+      html,
+      text,
+      headers: {
+        'List-Unsubscribe': `<${unsubscribeUrl}>`,
+        'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click'
+      }
+    })
+
+    if (error) {
+      console.error('[Email] Resend error:', error)
+      return { success: false, error: error.message }
+    }
+
+    await incrementQuota(prisma)
+    console.log(`[Email] Sent to ${to} — ID: ${data?.id}`)
+    return { success: true, messageId: data?.id }
+
+  } catch (err: any) {
+    console.error('[Email] Send exception:', err.message)
+    return { success: false, error: err.message }
+  }
+}
