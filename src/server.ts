@@ -1107,8 +1107,8 @@ app.get('/api/v1/stream', (req, res) => {
 })
 
 // Wake up the VentureOS Engine Grid
-app.listen(PORT, async () => {
-  console.log(`🏢 [VentureOS SaaS Core] Active and compiling on port ${PORT}`);
+app.listen(Number(PORT), '0.0.0.0', async () => {
+  console.log(`🏢 [VentureOS SaaS Core] Active and compiling on port ${PORT} at 0.0.0.0`);
   console.log(`🖥️ Visual Dashboard UI: http://localhost:${PORT}/dashboard`);
   console.log(`📦 Historical Workspace Vault: http://localhost:${PORT}/vault`);
   console.log(`👑 Autonomous Empire Center: http://localhost:${PORT}/empire`);
