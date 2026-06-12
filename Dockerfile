@@ -18,7 +18,7 @@ COPY . .
 RUN npx prisma generate
 
 # Initialize SQLite Database tables in the container image
-RUN npx prisma db push --skip-generate
+RUN npx prisma db push --accept-data-loss
 
 # Compile TypeScript → dist/
 RUN npm run build
