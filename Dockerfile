@@ -17,9 +17,12 @@ COPY . .
 # Generate Prisma client
 RUN npx prisma generate
 
+# Initialize SQLite Database tables in the container image
+RUN npx prisma db push --skip-generate
+
 # Compile TypeScript → dist/
 RUN npm run build
 
 EXPOSE 4000
 
-CMD ["sh", "-c", "npx prisma db push && node dist/server.js"]
+CMD ["node", "dist/server.js"]
