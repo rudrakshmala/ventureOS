@@ -21,6 +21,10 @@ const app = express();
 const PORT = process.env.PORT || 4000;
 
 // Middleware Array Matrix
+app.use('/api/v1', cors({
+  origin: process.env.DASHBOARD_URL || '*',
+  methods: ['GET', 'POST']
+}));
 app.use(cors());
 app.use(express.json());
 
@@ -1066,6 +1070,30 @@ app.get('/api/v1/memory/:scope', async (req, res) => {
   const scope = req.params.scope as any
   const data = await memoryBus.readScope(scope)
   res.json(data)
+})
+
+// Projects list API — consumed by dashboard
+app.get('/api/v1/projects', async (req, res) => {
+  try {
+    const projects = await prisma.salesProject.findMany({
+      select: {
+        id: true,
+        clientEmail: true,
+        clientName: true,
+        brief: true,
+        status: true,
+        createdAt: true
+      },
+      orderBy: {
+        createdAt: 'desc'
+      },
+      take: 50
+    });
+    res.json(projects);
+  } catch (err: any) {
+    console.error('[projects] Error:', err);
+    res.status(500).json({ error: 'Failed to fetch projects' });
+  }
 })
 
 // Outreach stats — consumed by dashboard
