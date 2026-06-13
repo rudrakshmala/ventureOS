@@ -1,4 +1,9 @@
-Completed Phase 1: Shared Memory Bus
-Completed Phase 2: Outreach Pipeline
-Completed Phase 3: Payment Layer
-Completed Phase 4: Frontend Dashboard
+Removed broken test_tenant_123_test_chatbot folder
+PHASE_4_FIXED_AND_COMPLETE
+
+Manual steps remaining:
+1. In the dashboard service's Railway Settings, confirm Root Directory = "workspaces/dashboard"
+2. Trigger a redeploy — the new nixpacks.toml should now take over and the prisma error should disappear
+3. Once deployed, add environment variables: NEXT_PUBLIC_API_URL, DASHBOARD_PASSWORD
+4. Generate a domain for this service
+5. Add DASHBOARD_URL to the main service's variables

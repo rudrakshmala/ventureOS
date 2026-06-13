@@ -6,7 +6,6 @@ export function middleware(request: NextRequest) {
   const password = process.env.DASHBOARD_PASSWORD
 
   if (!password) {
-    // Fail safe: if password not configured, block access entirely
     return new NextResponse('Dashboard not configured', { status: 503 })
   }
 
