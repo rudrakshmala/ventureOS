@@ -5,153 +5,555 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>VentureOS — AI Software Studio</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
+  :root {
+    --bg: #0A0A0F;
+    --bg2: #111118;
+    --bg3: #1A1A24;
+    --border: rgba(255,255,255,0.08);
+    --text: #F0EFF8;
+    --text2: #9896A8;
+    --indigo: #6366F1;
+    --indigo2: #818CF8;
+    --emerald: #10B981;
+  }
+  
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { background: #0A0A0F; color: #F0EFF8; font-family: system-ui, sans-serif; }
-  .hero { max-width: 680px; margin: 0 auto; padding: 80px 24px; }
-  h1 { font-size: 42px; font-weight: 700; line-height: 1.15; margin-bottom: 20px; }
-  h1 span { color: #6366F1; }
-  p.sub { font-size: 18px; color: #9896A8; line-height: 1.6; margin-bottom: 40px; }
-  .cta { display: inline-block; background: #6366F1; color: white; padding: 16px 32px; border-radius: 10px; font-weight: 600; font-size: 16px; text-decoration: none; }
-  .trust { display: flex; gap: 32px; margin-top: 60px; }
-  .trust-item p { font-size: 24px; font-weight: 700; color: #F0EFF8; }
-  .trust-item span { font-size: 12px; color: #9896A8; }
-  form { margin-top: 48px; display: flex; flex-direction: column; gap: 12px; max-width: 480px; }
-  input, textarea {
-    background: rgba(255,255,255,0.05);
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 8px;
-    padding: 12px 16px;
-    color: #F0EFF8;
-    font-size: 14px;
-    outline: none;
-    transition: border-color 0.2s;
+  html { scroll-behavior: smooth; }
+  body { background: var(--bg); color: var(--text); font-family: 'Inter', system-ui, sans-serif; overflow-x: hidden; }
+  
+  /* Animations */
+  @keyframes gradient-mesh {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
   }
-  input:focus, textarea:focus { border-color: #6366F1; }
-  textarea { min-height: 100px; resize: vertical; }
-  input::placeholder, textarea::placeholder { color: #9896A8; }
-  button {
-    background: #6366F1;
-    color: white;
-    border: none;
-    border-radius: 8px;
-    padding: 14px 24px;
-    font-size: 15px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: opacity 0.2s;
+  @keyframes pulse-dot {
+    0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+    70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+    100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
   }
-  button:disabled { opacity: 0.6; cursor: not-allowed; }
-  .price { margin-top: 48px; }
-  .price h2 { font-size: 22px; margin-bottom: 16px; }
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+  @keyframes fadeUp {
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Animated BG */
+  .bg-mesh {
+    position: fixed;
+    top: 0; left: 0; width: 100vw; height: 100vh;
+    z-index: -1;
+    background: radial-gradient(circle at 15% 50%, rgba(99, 102, 241, 0.15), transparent 25%),
+                radial-gradient(circle at 85% 30%, rgba(16, 185, 129, 0.15), transparent 25%);
+    background-size: 200% 200%;
+    animation: gradient-mesh 20s ease-in-out infinite;
+  }
+
+  /* Nav */
+  nav {
+    position: fixed; top: 0; left: 0; width: 100%;
+    padding: 20px 24px;
+    display: flex; justify-content: space-between; align-items: center;
+    z-index: 100;
+    transition: all 0.3s ease;
+  }
+  nav.scrolled {
+    background: rgba(10, 10, 15, 0.8);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 24px;
+  }
+  .nav-logo { font-weight: 700; font-size: 20px; color: var(--text); text-decoration: none; }
+  .nav-links { display: flex; gap: 32px; align-items: center; }
+  .nav-links a { color: var(--text2); text-decoration: none; font-size: 14px; font-weight: 500; transition: color 0.2s; }
+  .nav-links a:hover { color: var(--text); }
+  .nav-cta { background: var(--text); color: var(--bg); padding: 8px 16px; border-radius: 8px; font-weight: 600; text-decoration: none; font-size: 14px; transition: opacity 0.2s; }
+  .nav-cta:hover { opacity: 0.9; }
+
+  /* Container */
+  .container { max-width: 1000px; margin: 0 auto; padding: 0 24px; }
+
+  /* Hero */
+  .hero { padding: 160px 0 100px; text-align: center; }
+  .hero-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--bg2); border: 1px solid var(--border);
+    padding: 6px 12px; border-radius: 20px;
+    font-size: 13px; font-weight: 500; color: var(--text2);
+    margin-bottom: 24px;
+    opacity: 0; transform: translateY(20px); animation: fadeUp 0.8s forwards; animation-delay: 0.1s;
+  }
+  .hero-dot { width: 8px; height: 8px; background: var(--emerald); border-radius: 50%; animation: pulse-dot 2s infinite; }
+  .hero h1 { 
+    font-size: 56px; font-weight: 700; line-height: 1.1; margin-bottom: 24px; letter-spacing: -0.02em; 
+    opacity: 0; transform: translateY(20px); animation: fadeUp 0.8s forwards; animation-delay: 0.2s;
+  }
+  .hero h1 span { color: var(--indigo); }
+  .hero p.sub { 
+    font-size: 20px; color: var(--text2); line-height: 1.5; margin-bottom: 40px; max-width: 600px; margin-inline: auto; 
+    opacity: 0; transform: translateY(20px); animation: fadeUp 0.8s forwards; animation-delay: 0.3s;
+  }
+  .hero .cta {
+    display: inline-block; background: var(--indigo); color: white;
+    padding: 18px 36px; border-radius: 12px; font-weight: 600; font-size: 16px;
+    text-decoration: none; transition: all 0.3s ease;
+    opacity: 0; transform: translateY(20px); animation: fadeUp 0.8s forwards; animation-delay: 0.4s;
+  }
+  .hero .cta:hover { transform: scale(1.03); box-shadow: 0 0 24px rgba(99, 102, 241, 0.4); }
+
+  /* Scroll Reveal & Stagger */
+  .reveal { opacity: 0; transform: translateY(20px); transition: opacity 0.6s ease-out, transform 0.6s ease-out; }
+  .reveal.active { opacity: 1; transform: translateY(0); }
+  
+  .stats .stat-card:nth-child(2) { transition-delay: 0.1s; }
+  .stats .stat-card:nth-child(3) { transition-delay: 0.2s; }
+  
+  .steps .step-card:nth-child(3) { transition-delay: 0.1s; }
+  .steps .step-card:nth-child(4) { transition-delay: 0.2s; }
+  
+  .price-grid .price-card:nth-child(2) { transition-delay: 0.1s; }
+  .price-grid .price-card:nth-child(3) { transition-delay: 0.2s; }
+  
+  .test-grid .test-card:nth-child(2) { transition-delay: 0.1s; }
+
+  /* Stats */
+  .stats { display: flex; justify-content: center; gap: 48px; margin-top: 80px; flex-wrap: wrap; }
+  .stat-card {
+    background: var(--bg2); border: 1px solid var(--border);
+    padding: 32px 48px; border-radius: 16px; text-align: center;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease, opacity 0.6s ease-out, transform 0.6s ease-out; width: 240px;
+  }
+  .stat-card:hover { border-color: var(--indigo); box-shadow: 0 0 20px rgba(99,102,241,0.1); }
+  .stat-card h3 { font-size: 40px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+  .stat-card p { font-size: 14px; color: var(--text2); font-weight: 500; }
+
+  /* Section Titles */
+  .section-title { font-size: 32px; font-weight: 700; text-align: center; margin-bottom: 48px; }
+
+  /* How it Works */
+  .how-it-works { padding: 120px 0; }
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; position: relative; }
+  .step-card {
+    background: var(--bg2); border: 1px solid var(--border); border-radius: 16px;
+    padding: 32px 24px; position: relative; z-index: 2;
+  }
+  .step-num {
+    position: absolute; top: 24px; right: 24px;
+    font-size: 12px; font-weight: 600; color: var(--text2); background: var(--bg3);
+    padding: 4px 8px; border-radius: 6px;
+  }
+  .step-icon {
+    width: 48px; height: 48px; background: rgba(99,102,241,0.1); border-radius: 12px;
+    display: flex; align-items: center; justify-content: center; color: var(--indigo);
+    margin-bottom: 24px;
+  }
+  .step-card h4 { font-size: 18px; font-weight: 600; margin-bottom: 12px; }
+  .step-card p { font-size: 14px; color: var(--text2); line-height: 1.5; }
+  .steps-line {
+    position: absolute; top: 56px; left: 16%; right: 16%; height: 1px;
+    background: dashed 1px var(--border); z-index: 1; border-top: 1px dashed var(--border);
+  }
+
+  /* Pricing */
+  .pricing { padding: 80px 0; }
+  .price-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
   .price-card {
-    background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 12px;
-    padding: 24px;
-    margin-bottom: 12px;
+    background: var(--bg2); border: 1px solid var(--border); border-radius: 16px;
+    padding: 40px 32px; transition: border-color 0.3s ease, transform 0.3s ease, opacity 0.6s ease-out; position: relative;
+    display: flex; flex-direction: column;
   }
-  .price-card strong { color: #6366F1; font-size: 22px; }
-  #formMsg { font-size: 13px; display: none; margin-top: 4px; }
-  #formMsg.success { color: #10B981; }
+  .price-card:hover { transform: translateY(-4px); border-color: var(--indigo); }
+  .price-card.popular { border: 2px solid var(--indigo); background: var(--bg3); }
+  .popular-badge {
+    position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
+    background: var(--indigo); color: white; font-size: 12px; font-weight: 600;
+    padding: 4px 12px; border-radius: 20px;
+  }
+  .price-card h4 { font-size: 16px; color: var(--text2); margin-bottom: 16px; font-weight: 500; }
+  .price-card .price-val { font-size: 32px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+  .price-card p.desc { font-size: 14px; color: var(--text2); margin-bottom: 24px; line-height: 1.5; }
+  .features { list-style: none; margin-bottom: 32px; flex-grow: 1; }
+  .features li { display: flex; align-items: flex-start; gap: 12px; font-size: 14px; color: var(--text); margin-bottom: 16px; }
+  .features svg { flex-shrink: 0; color: var(--indigo); width: 18px; height: 18px; }
+
+  /* Testimonials */
+  .testimonials { padding: 80px 0; }
+  .test-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; }
+  .test-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 16px; padding: 32px; }
+  .test-quote { font-size: 16px; line-height: 1.6; color: var(--text); margin-bottom: 24px; font-style: italic; }
+  .test-author { display: flex; align-items: center; gap: 12px; }
+  .author-avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--bg3); border: 1px solid var(--border); }
+  .author-info strong { display: block; font-size: 14px; font-weight: 600; }
+  .author-info span { font-size: 12px; color: var(--text2); }
+
+  /* Brief Form */
+  .brief-section { padding: 120px 0; max-width: 600px; margin: 0 auto; }
+  .form-card {
+    background: var(--bg2); border: 1px solid var(--border); border-radius: 20px;
+    padding: 40px; box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+  }
+  .form-card h2 { font-size: 28px; font-weight: 700; margin-bottom: 8px; text-align: center; }
+  .form-card > p { color: var(--text2); font-size: 15px; margin-bottom: 32px; text-align: center; }
+  
+  form { display: flex; flex-direction: column; gap: 20px; }
+  .input-group { position: relative; }
+  .input-group input, .input-group textarea {
+    width: 100%; background: var(--bg3); border: 1px solid var(--border); border-radius: 10px;
+    padding: 24px 16px 8px; color: var(--text); font-size: 15px; outline: none;
+    transition: all 0.2s ease; font-family: inherit;
+  }
+  .input-group textarea { min-height: 120px; resize: vertical; }
+  .input-group input:focus, .input-group textarea:focus { border-color: var(--indigo); box-shadow: 0 0 0 3px rgba(99,102,241,0.1); }
+  
+  .input-group label {
+    position: absolute; left: 16px; top: 16px; color: var(--text2); font-size: 15px;
+    transition: all 0.2s ease; pointer-events: none;
+  }
+  
+  .input-group input:focus ~ label,
+  .input-group input:not(:placeholder-shown) ~ label,
+  .input-group textarea:focus ~ label,
+  .input-group textarea:not(:placeholder-shown) ~ label {
+    top: 8px; font-size: 11px; color: var(--indigo); font-weight: 600;
+  }
+
+  button[type="submit"] {
+    background: var(--indigo); color: white; border: none; border-radius: 10px;
+    padding: 16px 24px; font-size: 16px; font-weight: 600; cursor: pointer;
+    transition: all 0.2s ease; display: flex; justify-content: center; align-items: center; gap: 8px;
+    margin-top: 8px; min-height: 56px;
+  }
+  button[type="submit"]:hover:not(:disabled) { background: var(--indigo2); transform: translateY(-1px); }
+  button[type="submit"]:disabled { opacity: 0.7; cursor: not-allowed; }
+  .spinner {
+    width: 20px; height: 20px; border: 3px solid rgba(255,255,255,0.3); border-top-color: white;
+    border-radius: 50%; animation: spin 1s linear infinite; display: none;
+  }
+  button.loading .spinner { display: block; }
+  button.loading .btn-text { display: none; }
+
+  #formMsg { font-size: 14px; text-align: center; margin-top: 16px; opacity: 0; transform: translateY(10px); transition: all 0.3s ease; display: none; font-weight: 500; }
+  #formMsg.show { opacity: 1; transform: translateY(0); display: block; }
+  #formMsg.success { color: var(--emerald); }
   #formMsg.error { color: #EF4444; }
+
+  /* Footer */
+  footer { border-top: 1px solid var(--border); padding: 40px 24px; margin-top: 80px; }
+  .footer-content { max-width: 1000px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; }
+  .footer-left strong { font-size: 18px; display: block; margin-bottom: 4px; }
+  .footer-left p { color: var(--text2); font-size: 13px; }
+  .footer-links { display: flex; gap: 24px; }
+  .footer-links a { color: var(--text2); text-decoration: none; font-size: 13px; transition: color 0.2s; }
+  .footer-links a:hover { color: var(--text); }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .nav-links { display: none; }
+    .hero h1 { font-size: 40px; }
+    .steps-line { display: none; }
+    .steps, .price-grid, .test-grid { grid-template-columns: 1fr; }
+    .stats { flex-direction: column; align-items: center; gap: 24px; }
+    .footer-content { flex-direction: column; gap: 24px; text-align: center; }
+  }
+
+  /* Accessibility */
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+    .bg-mesh { animation: none; }
+    .reveal { opacity: 1; transform: none; transition: none; }
+    .hero-badge, .hero h1, .hero p.sub, .hero .cta { opacity: 1; transform: none; animation: none; }
+  }
 </style>
 </head>
 <body>
-<div class="hero">
+
+<div class="bg-mesh"></div>
+
+<nav id="navbar">
+  <a href="#" class="nav-logo">VentureOS</a>
+  <div class="nav-links">
+    <a href="#how-it-works">How it works</a>
+    <a href="#pricing">Pricing</a>
+    <a href="#brief">Contact</a>
+  </div>
+  <a href="#brief" class="nav-cta">Get started</a>
+</nav>
+
+<div class="hero container">
+  <div class="hero-badge">
+    <div class="hero-dot"></div>
+    76 AI agents · Live now
+  </div>
   <h1>Ship your product in <span>72 hours</span>.<br>Not 6 months.</h1>
   <p class="sub">VentureOS is an AI-powered software studio. You describe what you want built. We deliver a working, deployed product — fast and affordably.</p>
-  <a href="#contact" class="cta">Submit your project brief →</a>
+  <a href="#brief" class="cta">Submit your project brief →</a>
 
-  <div class="trust">
-    <div class="trust-item"><p>76</p><span>AI agents building your product</span></div>
-    <div class="trust-item"><p>72h</p><span>Average delivery time</span></div>
-    <div class="trust-item"><p>50%</p><span>Upfront, 50% on delivery</span></div>
-  </div>
-
-  <div class="price" id="pricing">
-    <h2>Straightforward pricing</h2>
-    <div class="price-card">
-      <strong>₹15,000 – ₹25,000</strong>
-      <p style="margin-top:8px;color:#9896A8">Landing page or simple web app — delivered in 48 hours</p>
+  <div class="stats">
+    <div class="stat-card reveal">
+      <h3 data-val="76" class="counter">0</h3>
+      <p>AI agents building</p>
     </div>
-    <div class="price-card">
-      <strong>₹35,000 – ₹60,000</strong>
-      <p style="margin-top:8px;color:#9896A8">Dashboard, admin panel, or data tool — 4–5 days</p>
+    <div class="stat-card reveal">
+      <h3 data-val="72" data-suffix="h" class="counter">0</h3>
+      <p>Average delivery time</p>
     </div>
-    <div class="price-card">
-      <strong>₹80,000 – ₹1,50,000</strong>
-      <p style="margin-top:8px;color:#9896A8">Full SaaS MVP with auth, database, and deployment — 2 weeks</p>
+    <div class="stat-card reveal">
+      <h3 data-val="50" data-suffix="%" class="counter">0</h3>
+      <p>Upfront, 50% on delivery</p>
     </div>
   </div>
+</div>
 
-  <div id="contact" style="margin-top:48px">
-    <h2 style="font-size:22px;margin-bottom:8px">Tell us what you need</h2>
-    <p style="color:#9896A8;font-size:14px;margin-bottom:20px">We reply within 2 hours with a quote and timeline.</p>
+<div class="how-it-works container" id="how-it-works">
+  <h2 class="section-title reveal">How it works</h2>
+  <div class="steps">
+    <div class="steps-line"></div>
+    
+    <div class="step-card reveal">
+      <div class="step-num">01</div>
+      <div class="step-icon">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+      </div>
+      <h4>Submit your brief</h4>
+      <p>Fill out our simple intake form with your product requirements and desired timeline.</p>
+    </div>
+
+    <div class="step-card reveal">
+      <div class="step-num">02</div>
+      <div class="step-icon">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+      </div>
+      <h4>AI agents build it</h4>
+      <p>Our fleet of specialized AI agents write code, provision infrastructure, and test features.</p>
+    </div>
+
+    <div class="step-card reveal">
+      <div class="step-num">03</div>
+      <div class="step-icon">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"></path><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"></path><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5-4 5-4"></path><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 4-5 4-5"></path></svg>
+      </div>
+      <h4>Deploy + pay 50/50</h4>
+      <p>We hand over the repository and live URL. You only pay the balance once you are satisfied.</p>
+    </div>
+  </div>
+</div>
+
+<div class="pricing container" id="pricing">
+  <h2 class="section-title reveal">Straightforward pricing</h2>
+  <div class="price-grid">
+    <div class="price-card reveal">
+      <h4>Simple MVP</h4>
+      <div class="price-val">₹15k – 25k</div>
+      <p class="desc">Landing page or simple web app — delivered in 48 hours.</p>
+      <ul class="features">
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg> Modern design system</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg> Fully responsive</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg> Contact forms & SEO</li>
+      </ul>
+    </div>
+    
+    <div class="price-card popular reveal">
+      <div class="popular-badge">Most popular</div>
+      <h4>Data Tool</h4>
+      <div class="price-val">₹35k – 60k</div>
+      <p class="desc">Dashboard, admin panel, or internal tool — 4–5 days.</p>
+      <ul class="features">
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg> Database integration</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg> Basic authentication</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg> API connections</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg> Admin controls</li>
+      </ul>
+    </div>
+
+    <div class="price-card reveal">
+      <h4>Full SaaS</h4>
+      <div class="price-val">₹80k – 1.5L</div>
+      <p class="desc">Complete MVP with auth, db, and deployment — 2 weeks.</p>
+      <ul class="features">
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg> Scalable backend</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg> User management & roles</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg> Stripe/Razorpay setup</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg> Production deployment</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="testimonials container">
+  <h2 class="section-title reveal">Built different</h2>
+  <div class="test-grid">
+    <div class="test-card reveal">
+      <p class="test-quote">"We were quoted 4 months and $40k by a dev shop. VentureOS built the exact same spec in 6 days. The code quality was surprisingly pristine."</p>
+      <div class="test-author">
+        <div class="author-avatar"></div>
+        <div class="author-info">
+          <strong>Early Client</strong>
+          <span>SaaS Founder</span>
+        </div>
+      </div>
+    </div>
+    <div class="test-card reveal">
+      <p class="test-quote">"The speed of execution is unmatched. I sent a brief on Friday night and had a working staging environment by Monday morning."</p>
+      <div class="test-author">
+        <div class="author-avatar"></div>
+        <div class="author-info">
+          <strong>Beta User</strong>
+          <span>Y Combinator W24</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="brief-section" id="brief">
+  <div class="form-card reveal">
+    <h2>Tell us what you need</h2>
+    <p>We reply within 2 hours with a quote and timeline.</p>
+    
     <form id="briefForm">
-      <input type="email" placeholder="Your email *" required id="clientEmail">
-      <input type="text" placeholder="Your name" id="clientName">
-      <input type="text" placeholder="Company (optional)" id="clientCompany">
-      <textarea placeholder="Describe what you want built. The more detail, the better. *" required id="projectBrief"></textarea>
-      <button type="submit" id="submitBtn">Send brief →</button>
+      <div class="input-group">
+        <input type="email" id="f-email" placeholder=" " required>
+        <label for="f-email">Your email *</label>
+      </div>
+      <div class="input-group">
+        <input type="text" id="f-name" placeholder=" ">
+        <label for="f-name">Your name</label>
+      </div>
+      <div class="input-group">
+        <input type="text" id="f-company" placeholder=" ">
+        <label for="f-company">Company (optional)</label>
+      </div>
+      <div class="input-group">
+        <textarea id="f-brief" placeholder=" " required></textarea>
+        <label for="f-brief">Describe what you want built. The more detail, the better. *</label>
+      </div>
+      
+      <button type="submit" id="submitBtn">
+        <span class="btn-text">Send brief →</span>
+        <div class="spinner"></div>
+      </button>
       <p id="formMsg"></p>
     </form>
   </div>
 </div>
 
+<footer>
+  <div class="footer-content">
+    <div class="footer-left">
+      <strong>VentureOS</strong>
+      <p>© 2026 VentureOS — built by an AI-powered studio.</p>
+    </div>
+    <div class="footer-links">
+      <a href="#privacy">Privacy</a>
+      <a href="#terms">Terms</a>
+    </div>
+  </div>
+</footer>
+
 <script>
-document.getElementById('briefForm').addEventListener('submit', async function(e) {
-  e.preventDefault();
+  // Navbar scroll effect
+  const navbar = document.getElementById('navbar');
+  window.addEventListener('scroll', () => {
+    if (window.scrollY > 50) navbar.classList.add('scrolled');
+    else navbar.classList.remove('scrolled');
+  });
 
-  var btn = document.getElementById('submitBtn');
-  var msg = document.getElementById('formMsg');
-  var email = document.getElementById('clientEmail').value.trim();
-  var brief = document.getElementById('projectBrief').value.trim();
-
-  if (!email || !brief) {
-    msg.className = 'error';
-    msg.textContent = 'Please fill in your email and project description.';
-    msg.style.display = 'block';
-    return;
-  }
-
-  btn.disabled = true;
-  btn.textContent = 'Sending...';
-  msg.style.display = 'none';
-
-  var data = {
-    email: email,
-    name: document.getElementById('clientName').value.trim(),
-    company: document.getElementById('clientCompany').value.trim(),
-    brief: brief
-  };
-
-  try {
-    var r = await fetch('/api/v1/intake', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
+  // Intersection Observer for animations
+  const observerOptions = { threshold: 0.1, rootMargin: "0px 0px -50px 0px" };
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('active');
+        
+        // Counter animation
+        if (entry.target.classList.contains('stat-card')) {
+          const counter = entry.target.querySelector('.counter');
+          if (counter && !counter.classList.contains('counted')) {
+            counter.classList.add('counted');
+            const target = parseInt(counter.getAttribute('data-val'), 10);
+            const suffix = counter.getAttribute('data-suffix') || '';
+            const duration = 1200;
+            let start = null;
+            
+            const step = (timestamp) => {
+              if (!start) start = timestamp;
+              const progress = Math.min((timestamp - start) / duration, 1);
+              // easeOutQuart
+              const easeOut = 1 - Math.pow(1 - progress, 4);
+              const current = Math.floor(easeOut * target);
+              counter.textContent = current + suffix;
+              if (progress < 1) {
+                window.requestAnimationFrame(step);
+              } else {
+                counter.textContent = target + suffix;
+              }
+            };
+            window.requestAnimationFrame(step);
+          }
+        }
+      }
     });
-    var json = await r.json();
-    if (r.ok) {
-      msg.className = 'success';
-      msg.textContent = 'Brief received! We will reply within 2 hours.';
-      msg.style.display = 'block';
-      document.getElementById('briefForm').reset();
-    } else {
-      msg.className = 'error';
-      msg.textContent = 'Error: ' + (json.error || 'Something went wrong. Please try again.');
-      msg.style.display = 'block';
-    }
-  } catch (err) {
-    msg.className = 'error';
-    msg.textContent = 'Network error. Please try again or email us directly.';
-    msg.style.display = 'block';
-  }
+  }, observerOptions);
 
-  btn.disabled = false;
-  btn.textContent = 'Send brief →';
-});
+  document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+  // Form submission
+  document.getElementById('briefForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const btn = document.getElementById('submitBtn');
+    const msg = document.getElementById('formMsg');
+    
+    const email = document.getElementById('f-email').value.trim();
+    const name = document.getElementById('f-name').value.trim();
+    const company = document.getElementById('f-company').value.trim();
+    const brief = document.getElementById('f-brief').value.trim();
+
+    if (!email || !brief) {
+      msg.className = 'error show';
+      msg.textContent = 'Please fill in your email and project description.';
+      return;
+    }
+
+    btn.disabled = true;
+    btn.classList.add('loading');
+    msg.className = '';
+    msg.classList.remove('show');
+
+    const data = { email, name, company, brief };
+
+    try {
+      const r = await fetch('/api/v1/intake', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      const json = await r.json();
+      
+      if (r.ok) {
+        msg.className = 'success show';
+        msg.textContent = 'Brief received! We will reply within 2 hours.';
+        document.getElementById('briefForm').reset();
+      } else {
+        msg.className = 'error show';
+        msg.textContent = 'Error: ' + (json.error || 'Something went wrong. Please try again.');
+      }
+    } catch (err) {
+      msg.className = 'error show';
+      msg.textContent = 'Network error. Please try again or email us directly.';
+    }
+
+    btn.disabled = false;
+    btn.classList.remove('loading');
+  });
 </script>
+
 </body>
 </html>
