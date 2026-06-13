@@ -11,7 +11,7 @@ COPY . .
 RUN npm run build
 
 # Expose port and start
-EXPOSE 3001
-ENV PORT=3001
+EXPOSE $PORT
+ENV PORT=$PORT
 
 CMD ["npm", "run", "start"]
