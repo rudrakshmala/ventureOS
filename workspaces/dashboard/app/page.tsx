@@ -51,6 +51,7 @@ interface LogEntry {
 
 
 export default function Dashboard() {
+  const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
   const [time, setTime] = useState('');
   const [stats, setStats] = useState<Stats>({});
   const [projects, setProjects] = useState<Project[]>([]);
@@ -82,7 +83,7 @@ export default function Dashboard() {
   // Fetch Outreach Stats
   const fetchStats = async () => {
     try {
-      const res = await apiFetch('/api/v1/outreach/stats');
+      const res = await fetch(`${API}/api/v1/outreach/stats`);
       if (res.ok) {
         const data = await res.json();
         setStats(data);
@@ -95,7 +96,7 @@ export default function Dashboard() {
   // Fetch Projects
   const fetchProjects = async () => {
     try {
-      const res = await apiFetch('/api/v1/projects');
+      const res = await fetch(`${API}/api/v1/projects`);
       if (res.ok) {
         const data = await res.json();
         setProjects(data);
@@ -108,7 +109,7 @@ export default function Dashboard() {
   // Fetch Memory Scope
   const fetchMemory = async () => {
     try {
-      const res = await apiFetch('/api/v1/memory/global');
+      const res = await fetch(`${API}/api/v1/memory/global`);
       if (res.ok) {
         const data = await res.json();
         setMemory(data);
@@ -120,7 +121,7 @@ export default function Dashboard() {
 
   // SSE Stream
   useEffect(() => {
-    const eventSource = new EventSource(`${API_BASE}/api/v1/stream`);
+    const eventSource = new EventSource(`${API}/api/v1/stream`);
     
     eventSource.onmessage = (event) => {
       try {
