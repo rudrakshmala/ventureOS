@@ -39,6 +39,7 @@
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "imap-simple": "^5.1.0",
+    "node-cron": "^4.2.1",
     "nodemailer": "^8.0.10",
     "resend": "^6.12.4",
     "zod": "^4.4.3"
@@ -49,6 +50,7 @@
     "@types/express": "^5.0.6",
     "@types/imap-simple": "^4.2.10",
     "@types/node": "^25.9.2",
+    "@types/node-cron": "^3.0.11",
     "@types/nodemailer": "^8.0.0",
     "mastra": "^1.12.2",
     "prisma": "^7.8.0",
