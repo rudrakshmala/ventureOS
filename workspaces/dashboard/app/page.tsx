@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
+import { apiFetch, API_BASE } from '@/lib/api';
 import { 
   Users, 
   Mail, 
@@ -48,7 +49,6 @@ interface LogEntry {
   timestamp: string;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
 export default function Dashboard() {
   const [time, setTime] = useState('');
@@ -82,7 +82,7 @@ export default function Dashboard() {
   // Fetch Outreach Stats
   const fetchStats = async () => {
     try {
-      const res = await fetch(`${API_URL}/api/v1/outreach/stats`);
+      const res = await apiFetch('/api/v1/outreach/stats');
       if (res.ok) {
         const data = await res.json();
         setStats(data);
@@ -95,7 +95,7 @@ export default function Dashboard() {
   // Fetch Projects
   const fetchProjects = async () => {
     try {
-      const res = await fetch(`${API_URL}/api/v1/projects`);
+      const res = await apiFetch('/api/v1/projects');
       if (res.ok) {
         const data = await res.json();
         setProjects(data);
@@ -108,7 +108,7 @@ export default function Dashboard() {
   // Fetch Memory Scope
   const fetchMemory = async () => {
     try {
-      const res = await fetch(`${API_URL}/api/v1/memory/global`);
+      const res = await apiFetch('/api/v1/memory/global');
       if (res.ok) {
         const data = await res.json();
         setMemory(data);
@@ -120,7 +120,7 @@ export default function Dashboard() {
 
   // SSE Stream
   useEffect(() => {
-    const eventSource = new EventSource(`${API_URL}/api/v1/stream`);
+    const eventSource = new EventSource(`${API_BASE}/api/v1/stream`);
     
     eventSource.onmessage = (event) => {
       try {
