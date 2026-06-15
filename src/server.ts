@@ -1207,7 +1207,75 @@ app.get('/api/v1/stream', (req, res) => {
   req.on('close', () => clearInterval(interval))
 })
 
-// Wake up the VentureOS Engine Grid
+// ─── HISTORICAL DATA ROUTES (dashboard) ──────────────────────────────────────
+
+// All sales leads — historical list
+app.get('/api/v1/leads', async (req, res) => {
+  try {
+    const leads = await prisma.salesLead.findMany({
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        company: true,
+        source: true,
+        status: true,
+        painPoint: true,
+        repliedAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    })
+    res.json(leads)
+  } catch (err: any) {
+    console.error('[leads] Error:', err)
+    res.status(500).json({ error: 'Failed to fetch leads' })
+  }
+})
+
+// All deals — deal pipeline
+app.get('/api/v1/deals', async (req, res) => {
+  try {
+    const deals = await prisma.deal.findMany({
+      select: {
+        id: true,
+        title: true,
+        value: true,
+        currency: true,
+        status: true,
+        closedAt: true,
+        deliveredAt: true,
+        paidAt: true,
+        createdAt: true,
+        lead: { select: { contactEmail: true, authorUsername: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    })
+    res.json(deals)
+  } catch (err: any) {
+    console.error('[deals] Error:', err)
+    res.status(500).json({ error: 'Failed to fetch deals' })
+  }
+})
+
+// Agent run logs — historical runs
+app.get('/api/v1/agent-runs', async (req, res) => {
+  try {
+    const runs = await prisma.agentRunLog.findMany({
+      orderBy: { startedAt: 'desc' },
+      take: 50,
+    })
+    res.json(runs)
+  } catch (err: any) {
+    console.error('[agent-runs] Error:', err)
+    res.status(500).json({ error: 'Failed to fetch agent runs' })
+  }
+})
+
+
 app.listen(Number(PORT), '0.0.0.0', async () => {
   console.log(`🏢 [VentureOS SaaS Core] Active and compiling on port ${PORT} at 0.0.0.0`);
   console.log(`🖥️ Visual Dashboard UI: http://localhost:${PORT}/dashboard`);
