@@ -59,6 +59,7 @@ export default function Dashboard() {
   
   // SSE buffering for hover pause
   const [isHovered, setIsHovered] = useState(false);
+  const isHoveredRef = useRef(false); // stable ref so SSE effect doesn't restart on hover
   const logBufferRef = useRef<LogEntry[]>([]);
   const logsRef = useRef<LogEntry[]>([]);
 
@@ -118,7 +119,7 @@ export default function Dashboard() {
     }
   };
 
-  // SSE Stream
+  // SSE Stream — runs once, uses isHoveredRef so hover/unhover never restarts it
   useEffect(() => {
     const eventSource = new EventSource(`${API_BASE}/api/v1/stream`);
     
@@ -132,7 +133,7 @@ export default function Dashboard() {
           timestamp: parsed.timestamp || new Date().toISOString()
         };
 
-        if (isHovered) {
+        if (isHoveredRef.current) {
           logBufferRef.current = [newLog, ...logBufferRef.current].slice(0, 50);
         } else {
           logsRef.current = [newLog, ...logsRef.current].slice(0, 50);
@@ -146,6 +147,11 @@ export default function Dashboard() {
     return () => {
       eventSource.close();
     };
+  }, []); // ← empty deps: EventSource created once, never torn down on hover
+
+  // Sync isHoveredRef whenever state changes
+  useEffect(() => {
+    isHoveredRef.current = isHovered;
   }, [isHovered]);
 
   // Handle un-hover: flush buffer to list
