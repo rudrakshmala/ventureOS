@@ -375,7 +375,7 @@ export default function Dashboard() {
             {logs.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-center p-4">
                 <span className="text-zinc-600 block text-base mb-1">??</span>
-                <span className="text-zinc-500 block">Waiting for events…</span>
+                <span className="text-zinc-500 block">Waiting for eventsÂ…</span>
               </div>
             ) : (
               logs.map((log) => (
