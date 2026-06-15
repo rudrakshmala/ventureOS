@@ -994,27 +994,47 @@ app.post('/api/v1/intake', async (req, res) => {
 })
 
 
-// PAYMENT: Generate payment link for a project
+// PAYMENT: Admin sets a price quote on a project (manual, after you 
+// reply to a lead and agree on scope)
+app.post('/api/v1/projects/:id/quote', async (req, res) => {
+  const { id } = req.params
+  const { amount } = req.body  // full project amount in INR
+
+  if (!amount || amount <= 0) {
+    return res.status(400).json({ error: 'Valid amount required' })
+  }
+
+  const project = await prisma.salesProject.update({
+    where: { id },
+    data: { priceQuoted: amount, status: 'scoping' }
+  })
+
+  res.json({ project })
+})
+
+// PAYMENT: Generate the 50% upfront payment link
 app.post('/api/v1/payments/create', async (req, res) => {
-  const { projectId, amount } = req.body
+  const { projectId } = req.body
   const project = await prisma.salesProject.findUnique({ where: { id: projectId } })
+
   if (!project) return res.status(404).json({ error: 'Project not found' })
+  if (!project.priceQuoted) return res.status(400).json({ error: 'Project has no price quote yet — use /quote first' })
 
   const { createPaymentLink } = await import('./payments/razorpay.js')
   const result = await createPaymentLink(
-    Math.floor(amount / 2),  // 50% upfront
+    project.priceQuoted,
     projectId,
     project.clientEmail,
     project.brief.substring(0, 100)
   )
 
-  if (!result) return res.status(500).json({ error: 'Payment link creation failed' })
+  if (!result) return res.status(503).json({ error: 'Payment service unavailable — check Razorpay credentials' })
 
   await prisma.payment.create({
     data: {
       projectId,
       razorpayOrderId: result.orderId,
-      amount: Math.floor(amount / 2) * 100,
+      amount: Math.floor(project.priceQuoted / 2) * 100,
       status: 'pending',
       type: '50_upfront'
     }
@@ -1023,33 +1043,84 @@ app.post('/api/v1/payments/create', async (req, res) => {
   res.json({ paymentUrl: result.paymentUrl, orderId: result.orderId })
 })
 
-// PAYMENT: Razorpay webhook — fires when payment succeeds
+// PAYMENT: Generate the FINAL 50% payment link (call after delivery)
+app.post('/api/v1/payments/create-final', async (req, res) => {
+  const { projectId } = req.body
+  const project = await prisma.salesProject.findUnique({ where: { id: projectId } })
+
+  if (!project) return res.status(404).json({ error: 'Project not found' })
+  if (!project.priceQuoted) return res.status(400).json({ error: 'Project has no price quote' })
+
+  const { createFinalPaymentLink } = await import('./payments/razorpay.js')
+  const result = await createFinalPaymentLink(
+    project.priceQuoted,
+    projectId,
+    project.clientEmail,
+    project.brief.substring(0, 100)
+  )
+
+  if (!result) return res.status(503).json({ error: 'Payment service unavailable' })
+
+  await prisma.payment.create({
+    data: {
+      projectId,
+      razorpayOrderId: result.orderId,
+      amount: Math.ceil(project.priceQuoted / 2) * 100,
+      status: 'pending',
+      type: '50_final'
+    }
+  })
+
+  res.json({ paymentUrl: result.paymentUrl, orderId: result.orderId })
+})
+
+// PAYMENT: Razorpay webhook — fires automatically on payment success
 app.post('/api/v1/payments/webhook', async (req, res) => {
   const { verifyWebhookSignature } = await import('./payments/razorpay.js')
   const signature = req.headers['x-razorpay-signature'] as string
-  
+
   if (!verifyWebhookSignature(JSON.stringify(req.body), signature)) {
     return res.status(400).json({ error: 'Invalid signature' })
   }
 
   const { event, payload } = req.body
-  
+
   if (event === 'payment_link.paid') {
     const orderId = payload.payment_link?.entity?.id
     const payment = await prisma.payment.findFirst({ where: { razorpayOrderId: orderId } })
-    
+
     if (payment) {
       await prisma.payment.update({ where: { id: payment.id }, data: { status: 'paid' } })
-      await prisma.salesProject.update({ where: { id: payment.projectId }, data: { status: 'scoping', paidAmount: payment.amount } })
-      
-      // Trigger the 76-agent delivery machine
-      const { memoryBus } = await import('./memory/index.js')
-      await memoryBus.write('payment', `paid:${payment.projectId}`, { paid: true, amount: payment.amount }, 'global')
-      console.log(`[Payment] 💰 Payment received for project ${payment.projectId}`)
+
+      if (payment.type === '50_upfront') {
+        await prisma.salesProject.update({
+          where: { id: payment.projectId },
+          data: { status: 'building', paidAmount: payment.amount }
+        })
+        console.log(`[Payment] Upfront payment received for project ${payment.projectId} — status -> building`)
+      } else if (payment.type === '50_final') {
+        const project = await prisma.salesProject.findUnique({ where: { id: payment.projectId } })
+        const totalPaid = (project?.paidAmount || 0) + payment.amount
+        await prisma.salesProject.update({
+          where: { id: payment.projectId },
+          data: { status: 'paid', paidAmount: totalPaid }
+        })
+        console.log(`[Payment] Final payment received for project ${payment.projectId} — status -> paid`)
+      }
     }
   }
-  
+
   res.json({ received: true })
+})
+
+// PAYMENT: Callback redirect after payment (user lands here from Razorpay)
+app.get('/api/v1/payments/callback', (req, res) => {
+  res.send(`
+    <html><body style="font-family:system-ui;padding:40px;text-align:center;background:#0A0A0F;color:#F0EFF8">
+      <h2>Thank you!</h2>
+      <p>Your payment is being processed. We'll be in touch shortly.</p>
+    </body></html>
+  `)
 })
 
 // Unsubscribe endpoint — required for CAN-SPAM compliance
@@ -1082,7 +1153,9 @@ app.get('/api/v1/projects', async (req, res) => {
         clientName: true,
         brief: true,
         status: true,
-        createdAt: true
+        createdAt: true,
+        priceQuoted: true,
+        paidAmount: true
       },
       orderBy: {
         createdAt: 'desc'

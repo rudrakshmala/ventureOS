@@ -1,32 +1,28 @@
 // PAYMENT: All payment creation and verification passes through this file
-// Razorpay docs: https://razorpay.com/docs/payments/payment-links/
 
-interface RazorpayOrderResponse {
-  id: string
-  amount: number
-  currency: string
-  receipt: string
-  status: string
-  short_url?: string
+export interface PaymentLinkResult {
+  paymentUrl: string
+  orderId: string
 }
 
-// PAYMENT: Create a payment link for 50% upfront
+// PAYMENT: Creates a Razorpay payment link for 50% upfront
 export async function createPaymentLink(
-  amount: number,  // in INR (e.g. 15000 for ₹15,000)
+  amount: number,    // full project amount in INR (e.g. 25000)
   projectId: string,
   clientEmail: string,
   description: string
-): Promise<{ paymentUrl: string; orderId: string } | null> {
+): Promise<PaymentLinkResult | null> {
   const keyId = process.env.RAZORPAY_KEY_ID
   const keySecret = process.env.RAZORPAY_KEY_SECRET
 
   if (!keyId || !keySecret) {
-    console.error('[Payment] Razorpay credentials not configured')
+    console.error('[Payment] Razorpay credentials not configured — cannot create link')
     return null
   }
 
+  const upfrontAmount = Math.floor(amount / 2)
   const auth = Buffer.from(`${keyId}:${keySecret}`).toString('base64')
-  
+
   try {
     const response = await fetch('https://api.razorpay.com/v1/payment_links', {
       method: 'POST',
@@ -35,44 +31,96 @@ export async function createPaymentLink(
         'Authorization': `Basic ${auth}`
       },
       body: JSON.stringify({
-        amount: amount * 100,  // Razorpay uses paise
+        amount: upfrontAmount * 100,  // paise
         currency: 'INR',
         description: `50% advance — ${description}`,
         customer: { email: clientEmail },
         notify: { sms: false, email: true },
         reminder_enable: true,
-        notes: {
-          project_id: projectId,
-          payment_type: '50_upfront',
-          description: description
-        },
+        notes: { project_id: projectId, payment_type: '50_upfront' },
         callback_url: `${process.env.APP_URL}/api/v1/payments/callback`,
         callback_method: 'get'
       })
     })
 
     if (!response.ok) {
-      const err = await response.text()
-      console.error('[Payment] Razorpay error:', err)
+      console.error('[Payment] Razorpay error:', response.status, await response.text())
       return null
     }
 
-    const data = await response.json() as RazorpayOrderResponse
+    const data = await response.json() as any
     return {
       paymentUrl: data.short_url || `https://rzp.io/${data.id}`,
       orderId: data.id
     }
-
   } catch (err: any) {
     console.error('[Payment] Exception:', err.message)
     return null
   }
 }
 
-// PAYMENT: Verify webhook signature from Razorpay
+// PAYMENT: Creates the FINAL 50% payment link, called after delivery
+export async function createFinalPaymentLink(
+  amount: number,
+  projectId: string,
+  clientEmail: string,
+  description: string
+): Promise<PaymentLinkResult | null> {
+  const keyId = process.env.RAZORPAY_KEY_ID
+  const keySecret = process.env.RAZORPAY_KEY_SECRET
+
+  if (!keyId || !keySecret) {
+    console.error('[Payment] Razorpay credentials not configured')
+    return null
+  }
+
+  const finalAmount = Math.ceil(amount / 2)
+  const auth = Buffer.from(`${keyId}:${keySecret}`).toString('base64')
+
+  try {
+    const response = await fetch('https://api.razorpay.com/v1/payment_links', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Basic ${auth}`
+      },
+      body: JSON.stringify({
+        amount: finalAmount * 100,
+        currency: 'INR',
+        description: `Final 50% — ${description}`,
+        customer: { email: clientEmail },
+        notify: { sms: false, email: true },
+        reminder_enable: true,
+        notes: { project_id: projectId, payment_type: '50_final' },
+        callback_url: `${process.env.APP_URL}/api/v1/payments/callback`,
+        callback_method: 'get'
+      })
+    })
+
+    if (!response.ok) {
+      console.error('[Payment] Razorpay error:', response.status, await response.text())
+      return null
+    }
+
+    const data = await response.json() as any
+    return {
+      paymentUrl: data.short_url || `https://rzp.io/${data.id}`,
+      orderId: data.id
+    }
+  } catch (err: any) {
+    console.error('[Payment] Exception:', err.message)
+    return null
+  }
+}
+
+// PAYMENT: Verifies the Razorpay webhook signature
 export function verifyWebhookSignature(body: string, signature: string): boolean {
+  const secret = process.env.RAZORPAY_WEBHOOK_SECRET
+  if (!secret) {
+    console.error('[Payment] RAZORPAY_WEBHOOK_SECRET not configured')
+    return false
+  }
   const crypto = require('crypto')
-  const secret = process.env.RAZORPAY_WEBHOOK_SECRET || ''
   const expected = crypto.createHmac('sha256', secret).update(body).digest('hex')
   return expected === signature
 }
