@@ -40,6 +40,16 @@ interface AgentRun {
 
 interface MemoryEntry { agentId: string; key: string; value: any; updatedAt: string; }
 
+interface MailboxEmail {
+  id: string;
+  to: string;
+  subject: string;
+  body: string;
+  status: string;
+  sentAt: string;
+  type: string;
+}
+
 interface LogEntry { id: string; type: string; data: any; timestamp: string; }
 
 const LOGS_STORAGE_KEY = 'ventureos_activity_log';
@@ -65,7 +75,7 @@ function Badge({ label }: { label: string }) {
 }
 
 type PipelineState = 'idle' | 'running' | 'done' | 'error';
-type Tab = 'sales' | 'engineering' | 'executive';
+type Tab = 'sales' | 'engineering' | 'executive' | 'mailbox';
 
 export default function Dashboard() {
   const [time, setTime] = useState('');
@@ -95,6 +105,10 @@ export default function Dashboard() {
   // Email viewer state
   const [viewEmailLead, setViewEmailLead] = useState<SalesLead | null>(null);
 
+  // Mailbox state
+  const [emails, setEmails] = useState<MailboxEmail[]>([]);
+  const [viewMail, setViewMail] = useState<MailboxEmail | null>(null);
+
   // Modular tabs
   const [activeTab, setActiveTab] = useState<Tab>('sales');
 
@@ -112,16 +126,18 @@ export default function Dashboard() {
   const fetchDeals = async () => { try { const r = await apiFetch('/api/v1/deals'); if (r.ok) setDeals(await r.json()); } catch {} };
   const fetchAgentRuns = async () => { try { const r = await apiFetch('/api/v1/agent-runs'); if (r.ok) setAgentRuns(await r.json()); } catch {} };
   const fetchMemory = async () => { try { const r = await apiFetch('/api/v1/memory/global'); if (r.ok) setMemory(await r.json()); } catch {} };
+  const fetchMailbox = async () => { try { const r = await apiFetch('/api/v1/mailbox'); if (r.ok) setEmails(await r.json()); } catch {} };
 
   useEffect(() => {
     try {
       const stored = localStorage.getItem(LOGS_STORAGE_KEY);
       if (stored) { const p: LogEntry[] = JSON.parse(stored); logsRef.current = p; setLogs(p); }
     } catch {}
-    fetchOutreachStats(); fetchEmpireStats(); fetchLeads(); fetchProjects(); fetchDeals(); fetchAgentRuns(); fetchMemory();
+    fetchOutreachStats(); fetchEmpireStats(); fetchLeads(); fetchProjects(); fetchDeals(); fetchAgentRuns(); fetchMemory(); fetchMailbox();
     const ids = [
       setInterval(fetchOutreachStats, 15000), setInterval(fetchEmpireStats, 30000), setInterval(fetchLeads, 30000),
       setInterval(fetchProjects, 15000), setInterval(fetchDeals, 30000), setInterval(fetchAgentRuns, 30000), setInterval(fetchMemory, 5000),
+      setInterval(fetchMailbox, 15000),
     ];
     return () => ids.forEach(clearInterval);
   }, []);
@@ -250,6 +266,9 @@ export default function Dashboard() {
       <div className="flex flex-wrap items-center gap-2 border-b border-zinc-800 pb-px">
         <button onClick={() => setActiveTab('sales')} className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition ${activeTab === 'sales' ? 'border-sky-500 text-sky-400 bg-sky-500/10' : 'border-transparent text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'}`}>
           <Briefcase className="w-4 h-4" /> Core Business & Sales
+        </button>
+        <button onClick={() => setActiveTab('mailbox')} className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition ${activeTab === 'mailbox' ? 'border-purple-500 text-purple-400 bg-purple-500/10' : 'border-transparent text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'}`}>
+          <Mail className="w-4 h-4" /> Outbox & Mailbox
         </button>
         <button onClick={() => setActiveTab('engineering')} className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition ${activeTab === 'engineering' ? 'border-indigo-500 text-indigo-400 bg-indigo-500/10' : 'border-transparent text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'}`}>
           <Code2 className="w-4 h-4" /> Engineering & Delivery
@@ -405,6 +424,101 @@ export default function Dashboard() {
                     {deals.map((d) => (
                       <tr key={d.id} className="hover:bg-zinc-900/10 transition">
                         <td className="py-3 pr-4 text-zinc-300 font-medium max-w-[180px] truncate">{d.title}</td><td className="py-3 pr-4 text-zinc-400">{d.lead?.contactEmail || d.lead?.authorUsername || '-'}</td><td className="py-3 pr-4 text-yellow-400 font-bold">{fmtUsd(d.value)} <span className="text-zinc-600 font-normal">{d.currency}</span></td><td className="py-3 pr-4"><Badge label={d.status} /></td><td className="py-3 pr-4 text-zinc-500">{fmtDate(d.closedAt)}</td><td className="py-3 text-zinc-500">{fmtDate(d.createdAt)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        </div>
+      )}
+
+      {/* ================================================================================================= */}
+      {/* 1B. OUTBOX & MAILBOX TAB */}
+      {/* ================================================================================================= */}
+      {activeTab === 'mailbox' && (
+        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+          <section className="card p-6 space-y-5 border border-purple-900/40 bg-purple-950/10">
+            <div className="flex items-center gap-2">
+              <Mail className="w-4 h-4 text-purple-400" />
+              <h2 className="text-base font-semibold text-zinc-200">Outbox & Communication Logs</h2>
+              <span className="ml-2 text-[10px] uppercase tracking-wider bg-purple-950/60 text-purple-400 border border-purple-800/40 px-2 py-0.5 rounded">
+                Real-time mail dispatch
+              </span>
+            </div>
+            
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="bg-zinc-900/60 border border-zinc-800/50 p-4 rounded-xl">
+                <span className="text-[10px] uppercase tracking-wider text-zinc-500 font-bold block mb-1">Total Sent</span>
+                <span className="text-xl font-bold font-mono text-purple-400">{emails.length}</span>
+              </div>
+              <div className="bg-zinc-900/60 border border-zinc-800/50 p-4 rounded-xl">
+                <span className="text-[10px] uppercase tracking-wider text-zinc-500 font-bold block mb-1">Inbound Proposals</span>
+                <span className="text-xl font-bold font-mono text-emerald-400">
+                  {emails.filter(e => e.type === 'inbound_proposal').length}
+                </span>
+              </div>
+              <div className="bg-zinc-900/60 border border-zinc-800/50 p-4 rounded-xl">
+                <span className="text-[10px] uppercase tracking-wider text-zinc-500 font-bold block mb-1">Cold Outreach</span>
+                <span className="text-xl font-bold font-mono text-sky-400">
+                  {emails.filter(e => e.type === 'outbound_cold').length}
+                </span>
+              </div>
+              <div className="bg-zinc-900/60 border border-zinc-800/50 p-4 rounded-xl">
+                <span className="text-[10px] uppercase tracking-wider text-zinc-500 font-bold block mb-1">Dispatch Node</span>
+                <span className="text-xs font-semibold text-zinc-400 block mt-1 truncate">mail.rudrakshventure.me</span>
+              </div>
+            </div>
+
+            {emails.length === 0 ? (
+              <div className="py-12 flex flex-col items-center justify-center text-center">
+                <Mail className="w-8 h-8 text-zinc-700 mb-3" />
+                <span className="text-zinc-500 text-sm">No dispatched emails found in the outbox database.</span>
+              </div>
+            ) : (
+              <div className="overflow-x-auto border border-zinc-800/40 rounded-xl bg-zinc-950/40">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-zinc-800 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+                      <th className="p-4 font-medium">Recipient</th>
+                      <th className="p-4 font-medium">Subject</th>
+                      <th className="p-4 font-medium">Type</th>
+                      <th className="p-4 font-medium">Status</th>
+                      <th className="p-4 font-medium">Sent At</th>
+                      <th className="p-4 font-medium text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-900/40 text-xs">
+                    {emails.map((email) => (
+                      <tr key={email.id} className="hover:bg-zinc-900/20 transition">
+                        <td className="p-4 text-zinc-300 font-mono font-medium truncate max-w-[180px]" title={email.to}>
+                          {email.to}
+                        </td>
+                        <td className="p-4 text-zinc-400 truncate max-w-sm" title={email.subject}>
+                          {email.subject}
+                        </td>
+                        <td className="p-4">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-medium border uppercase tracking-wider ${email.type === 'inbound_proposal' ? 'bg-purple-950/50 text-purple-400 border-purple-800/30' : 'bg-sky-950/50 text-sky-400 border-sky-800/30'}`}>
+                            {email.type.replace('_', ' ')}
+                          </span>
+                        </td>
+                        <td className="p-4">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-medium border uppercase tracking-wider ${email.status === 'SENT' || email.status === 'success' ? 'bg-emerald-950/50 text-emerald-400 border-emerald-800/30' : 'bg-red-950/50 text-red-400 border-red-800/30'}`}>
+                            {email.status}
+                          </span>
+                        </td>
+                        <td className="p-4 text-zinc-500 font-mono">
+                          {fmtDate(email.sentAt)} {new Date(email.sentAt).toLocaleTimeString()}
+                        </td>
+                        <td className="p-4 text-right">
+                          <button
+                            onClick={() => setViewMail(email)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 hover:border-purple-600 hover:bg-purple-950/20 transition cursor-pointer text-[11px]"
+                          >
+                            <MailOpen className="w-3.5 h-3.5" /> View HTML
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -587,6 +701,27 @@ export default function Dashboard() {
               ) : (
                 <p className="text-zinc-500 text-sm">No email content recorded.</p>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mailbox Detail Modal */}
+      {viewMail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-zinc-950 border border-zinc-800 rounded-xl w-full max-w-3xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800 bg-zinc-900/50">
+              <div>
+                <span className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded border mr-2 ${viewMail.type === 'inbound_proposal' ? 'bg-purple-950/50 text-purple-400 border-purple-800/40' : 'bg-sky-950/50 text-sky-400 border-sky-800/40'}`}>
+                  {viewMail.type.replace('_', ' ')}
+                </span>
+                <h3 className="font-semibold text-zinc-200 text-sm inline-block">{viewMail.subject}</h3>
+                <p className="text-xs text-zinc-500 mt-1">To: <span className="text-zinc-300 font-mono">{viewMail.to}</span> <span className="mx-1.5 text-zinc-700">|</span> Date: <span className="text-zinc-400">{fmtDate(viewMail.sentAt)} {new Date(viewMail.sentAt).toLocaleTimeString()}</span></p>
+              </div>
+              <button onClick={() => setViewMail(null)} className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-400 transition"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="p-5 overflow-y-auto flex-1 bg-zinc-950">
+              <div className="prose prose-invert prose-sm max-w-none prose-p:leading-relaxed prose-a:text-sky-400 p-6 bg-zinc-900/40 rounded-xl border border-zinc-850" dangerouslySetInnerHTML={{ __html: viewMail.body }} />
             </div>
           </div>
         </div>

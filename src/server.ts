@@ -1028,15 +1028,19 @@ Analyze this brief and generate a full proposal and price quote in HTML format, 
 
         // 2. Create Deal
         // We need a dummy lead to attach the deal if it doesn't exist
-        let lead = await prisma.salesLead.findUnique({ where: { email } });
+        let lead = await prisma.lead.findFirst({ where: { contactEmail: email } });
         if (!lead) {
-          lead = await prisma.salesLead.create({
+          lead = await prisma.lead.create({
             data: {
-              email,
-              name: name || null,
-              company: company || null,
               source: 'inbound_website',
-              status: 'replied'
+              sourceUrl: 'https://ventureos.com/intake',
+              authorUsername: name || email,
+              contactEmail: email,
+              postTitle: `Inbound request: ${company || email}`,
+              postContent: brief,
+              painPoint: brief.substring(0, 100),
+              budgetSignal: budget || 'unknown',
+              status: 'REPLIED'
             }
           });
         }
@@ -1062,6 +1066,18 @@ Analyze this brief and generate a full proposal and price quote in HTML format, 
             text: 'Please view this email in an HTML compatible client.' // Fallback
           }
         );
+
+        // 4. Save to OutreachCampaign so it appears in the Mailbox
+        await prisma.outreachCampaign.create({
+          data: {
+            leadId: lead.id,
+            sequence: 1,
+            subject: quoteData.closingEmailSubject || 'Your Project Proposal from VentureOS',
+            body: quoteData.closingEmailHtml || quoteData.proposalHtml,
+            status: emailResult.success ? 'SENT' : 'FAILED',
+            sentAt: new Date()
+          }
+        });
 
         if (emailResult.success) {
           console.log(`[Intake] Successfully sent quote email to ${email}`);
@@ -1266,6 +1282,49 @@ app.get('/api/v1/outreach/stats', async (req, res) => {
   })
   const formatted = Object.fromEntries(stats.map(s => [s.status, s._count.status]))
   res.json(formatted)
+})
+
+// Unified Mailbox — returns sent proposals and cold outreach emails
+app.get('/api/v1/mailbox', async (req, res) => {
+  try {
+    const campaigns = await prisma.outreachCampaign.findMany({
+      include: { lead: true },
+      orderBy: { sentAt: 'desc' },
+      take: 50
+    })
+    const salesLeads = await prisma.salesLead.findMany({
+      where: { pitchSent: { not: null } },
+      orderBy: { updatedAt: 'desc' },
+      take: 50
+    })
+
+    const emails = [
+      ...campaigns.map(c => ({
+        id: c.id,
+        to: c.lead.contactEmail || c.lead.authorUsername,
+        subject: c.subject,
+        body: c.body,
+        status: c.status,
+        sentAt: c.sentAt || c.createdAt,
+        type: 'inbound_proposal'
+      })),
+      ...salesLeads.map(s => ({
+        id: s.id,
+        to: s.email,
+        subject: `Re: Project Pitch to ${s.company || 'your startup'}`,
+        body: s.pitchSent!,
+        status: 'SENT',
+        sentAt: s.updatedAt,
+        type: 'outbound_cold'
+      }))
+    ]
+
+    emails.sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime())
+    res.json(emails.slice(0, 50))
+  } catch (err: any) {
+    console.error('[mailbox] Error:', err)
+    res.status(500).json({ error: 'Failed to fetch mailbox' })
+  }
 })
 
 // Start outreach pipeline manually (for testing)
