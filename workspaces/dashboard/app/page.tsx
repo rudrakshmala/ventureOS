@@ -26,6 +26,8 @@ import {
   StopCircle,
   CheckCircle2,
   AlertCircle,
+  X,
+  MailOpen,
 } from 'lucide-react';
 
 interface Stats {
@@ -54,6 +56,7 @@ interface SalesLead {
   source: string;
   status: string;
   painPoint: string | null;
+  pitchSent: string | null;
   repliedAt: string | null;
   createdAt: string;
 }
@@ -179,6 +182,9 @@ export default function Dashboard() {
   const [scoutState, setScoutState] = useState<PipelineState>('idle');
   const [controlLog, setControlLog] = useState<string[]>([]);
   const controlLogRef = useRef<HTMLDivElement>(null);
+
+  // Email viewer state
+  const [viewEmailLead, setViewEmailLead] = useState<SalesLead | null>(null);
 
   useEffect(() => {
     const tick = () => {
@@ -598,6 +604,7 @@ export default function Dashboard() {
                     <th className="pb-3 pr-4 font-medium">Source</th>
                     <th className="pb-3 pr-4 font-medium">Status</th>
                     <th className="pb-3 pr-4 font-medium">Pain point</th>
+                    <th className="pb-3 pr-4 font-medium">Mailbox</th>
                     <th className="pb-3 font-medium">Added</th>
                   </tr>
                 </thead>
@@ -609,6 +616,13 @@ export default function Dashboard() {
                       <td className="py-3 pr-4"><span className="px-2 py-0.5 rounded text-[10px] bg-zinc-800 text-zinc-300 border border-zinc-700 uppercase">{lead.source}</span></td>
                       <td className="py-3 pr-4"><Badge label={lead.status} /></td>
                       <td className="py-3 pr-4 text-zinc-500 max-w-[180px] truncate" title={lead.painPoint || ''}>{lead.painPoint ? lead.painPoint.substring(0, 50) + (lead.painPoint.length > 50 ? '...' : '') : '-'}</td>
+                      <td className="py-3 pr-4 text-zinc-400">
+                        {lead.pitchSent ? (
+                          <button onClick={() => setViewEmailLead(lead)} className="flex items-center gap-1.5 px-2 py-1 bg-zinc-800 hover:bg-zinc-700 hover:text-indigo-300 rounded border border-zinc-700 transition">
+                            <MailOpen className="w-3.5 h-3.5" /> <span className="text-[10px] uppercase font-semibold">View</span>
+                          </button>
+                        ) : '-'}
+                      </td>
                       <td className="py-3 text-zinc-500">{fmtDate(lead.createdAt)}</td>
                     </tr>
                   ))}
@@ -793,6 +807,35 @@ export default function Dashboard() {
           </div>
         )}
       </section>
+
+      {/* Email Viewer Modal */}
+      {viewEmailLead && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-zinc-950 border border-zinc-800 rounded-xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800 bg-zinc-900/50">
+              <div>
+                <h3 className="font-semibold text-zinc-200 flex items-center gap-2">
+                  <MailOpen className="w-4 h-4 text-indigo-400" /> Sent Mail
+                </h3>
+                <p className="text-xs text-zinc-500 mt-1">To: <span className="text-zinc-300 font-mono">{viewEmailLead.email}</span></p>
+              </div>
+              <button onClick={() => setViewEmailLead(null)} className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-400 transition">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-5 overflow-y-auto flex-1">
+              {viewEmailLead.pitchSent ? (
+                <div 
+                  className="prose prose-invert prose-sm max-w-none prose-p:leading-relaxed prose-a:text-indigo-400 p-4 bg-zinc-900 rounded-lg border border-zinc-800/60"
+                  dangerouslySetInnerHTML={{ __html: viewEmailLead.pitchSent }} 
+                />
+              ) : (
+                <p className="text-zinc-500 text-sm">No email content recorded.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

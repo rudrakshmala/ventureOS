@@ -1221,6 +1221,7 @@ app.get('/api/v1/leads', async (req, res) => {
         source: true,
         status: true,
         painPoint: true,
+        pitchSent: true,
         repliedAt: true,
         createdAt: true,
         updatedAt: true,
