@@ -21,6 +21,11 @@ import {
   RefreshCw,
   Zap,
   Target,
+  Play,
+  Search,
+  StopCircle,
+  CheckCircle2,
+  AlertCircle,
 } from 'lucide-react';
 
 interface Stats {
@@ -149,6 +154,8 @@ function Badge({ label }: { label: string }) {
   );
 }
 
+type PipelineState = 'idle' | 'running' | 'done' | 'error';
+
 export default function Dashboard() {
   const [time, setTime] = useState('');
   const [outreachStats, setOutreachStats] = useState<Stats>({});
@@ -165,6 +172,13 @@ export default function Dashboard() {
   const isHoveredRef = useRef(false);
   const logBufferRef = useRef<LogEntry[]>([]);
   const logsRef = useRef<LogEntry[]>([]);
+
+  // Agent control panel state
+  const [outreachState, setOutreachState] = useState<PipelineState>('idle');
+  const [empireState, setEmpireState] = useState<PipelineState>('idle');
+  const [scoutState, setScoutState] = useState<PipelineState>('idle');
+  const [controlLog, setControlLog] = useState<string[]>([]);
+  const controlLogRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const tick = () => {
@@ -269,6 +283,99 @@ export default function Dashboard() {
   const pagedLeads = leads.slice(leadsPage * LEADS_PER_PAGE, (leadsPage + 1) * LEADS_PER_PAGE);
   const totalLeadPages = Math.ceil(leads.length / LEADS_PER_PAGE);
 
+  const addControlLog = (msg: string) => {
+    setControlLog(prev => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev].slice(0, 100));
+    setTimeout(() => controlLogRef.current?.scrollTo({ top: 0, behavior: 'smooth' }), 50);
+  };
+
+  // Trigger: Source leads from Apollo NOW
+  const runScout = async () => {
+    if (scoutState === 'running') return;
+    setScoutState('running');
+    addControlLog('Starting scout — fetching leads from Apollo...');
+    try {
+      const es = new EventSource(`${API_BASE}/api/v1/empire/run-scout`);
+      es.addEventListener('EMPIRE_LOG', (e: any) => {
+        const d = JSON.parse(e.data);
+        addControlLog(d.log);
+      });
+      es.addEventListener('COMPLETE', () => {
+        es.close();
+        setScoutState('done');
+        addControlLog('Scout complete. Refreshing leads...');
+        fetchLeads(); fetchOutreachStats(); fetchEmpireStats();
+      });
+      es.addEventListener('CRASH', (e: any) => {
+        const d = JSON.parse(e.data);
+        es.close();
+        setScoutState('error');
+        addControlLog('Scout CRASHED: ' + d.message);
+      });
+      es.onerror = () => { es.close(); setScoutState('error'); addControlLog('Scout connection lost.'); };
+    } catch (err: any) {
+      setScoutState('error');
+      addControlLog('Scout error: ' + err.message);
+    }
+  };
+
+  // Trigger: Run full outreach cycle (source leads + send emails)
+  const runOutreach = async () => {
+    if (outreachState === 'running') return;
+    setOutreachState('running');
+    addControlLog('Starting outreach pipeline — sourcing leads + sending emails...');
+    try {
+      const res = await apiFetch('/api/v1/outreach/start', { method: 'POST' });
+      if (res.ok) {
+        addControlLog('Outreach pipeline started. Emails will send with 30s delays. Check leads table in 2 mins.');
+        setOutreachState('done');
+        setTimeout(() => { fetchLeads(); fetchOutreachStats(); }, 5000);
+      } else {
+        setOutreachState('error');
+        addControlLog('Outreach start failed: ' + res.status);
+      }
+    } catch (err: any) {
+      setOutreachState('error');
+      addControlLog('Outreach error: ' + err.message);
+    }
+  };
+
+  // Trigger: Full empire cycle (76 agents — scout + pitch + build)
+  const runEmpire = async () => {
+    if (empireState === 'running') return;
+    setEmpireState('running');
+    addControlLog('Launching full 76-agent empire cycle...');
+    try {
+      const es = new EventSource(`${API_BASE}/api/v1/empire/run-cycle`);
+      es.addEventListener('EMPIRE_LOG', (e: any) => {
+        const d = JSON.parse(e.data);
+        addControlLog(d.log);
+      });
+      es.addEventListener('COMPLETE', () => {
+        es.close();
+        setEmpireState('done');
+        addControlLog('Empire cycle complete!');
+        fetchLeads(); fetchOutreachStats(); fetchEmpireStats(); fetchAgentRuns();
+      });
+      es.addEventListener('CRASH', (e: any) => {
+        const d = JSON.parse(e.data);
+        es.close();
+        setEmpireState('error');
+        addControlLog('Empire CRASHED: ' + d.message);
+      });
+      es.onerror = () => { es.close(); setEmpireState('error'); addControlLog('Empire connection lost.'); };
+    } catch (err: any) {
+      setEmpireState('error');
+      addControlLog('Empire error: ' + err.message);
+    }
+  };
+
+  const stateIcon = (s: PipelineState) => {
+    if (s === 'running') return <RefreshCw className="w-4 h-4 animate-spin" />;
+    if (s === 'done') return <CheckCircle2 className="w-4 h-4 text-emerald-400" />;
+    if (s === 'error') return <AlertCircle className="w-4 h-4 text-red-400" />;
+    return null;
+  };
+
   return (
     <div className="min-h-screen p-6 md:p-10 space-y-8 max-w-7xl mx-auto">
 
@@ -293,6 +400,80 @@ export default function Dashboard() {
           </button>
         </div>
       </header>
+
+      {/* ── AGENT CONTROL PANEL ── */}
+      <section className="card p-6 space-y-5 border border-indigo-900/40 bg-indigo-950/10">
+        <div className="flex items-center gap-2">
+          <Zap className="w-4 h-4 text-indigo-400" />
+          <h2 className="text-base font-semibold text-zinc-200">Agent Control Panel</h2>
+          <span className="ml-2 text-[10px] uppercase tracking-wider bg-indigo-950/60 text-indigo-400 border border-indigo-800/40 px-2 py-0.5 rounded">76 agents ready</span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {/* Scout */}
+          <button
+            onClick={runScout}
+            disabled={scoutState === 'running'}
+            className="flex items-center justify-between gap-3 px-5 py-4 rounded-xl bg-zinc-900 border border-zinc-700 hover:border-indigo-600 hover:bg-indigo-950/30 disabled:opacity-50 disabled:cursor-not-allowed transition group text-left"
+          >
+            <div>
+              <div className="flex items-center gap-2 text-sm font-semibold text-zinc-200 group-hover:text-indigo-300 transition">
+                <Search className="w-4 h-4 text-indigo-400" /> Source Leads
+              </div>
+              <p className="text-[11px] text-zinc-500 mt-1">Pull fresh leads from Apollo right now</p>
+            </div>
+            {stateIcon(scoutState) || <Play className="w-4 h-4 text-indigo-400 opacity-60 group-hover:opacity-100" />}
+          </button>
+
+          {/* Outreach */}
+          <button
+            onClick={runOutreach}
+            disabled={outreachState === 'running'}
+            className="flex items-center justify-between gap-3 px-5 py-4 rounded-xl bg-zinc-900 border border-zinc-700 hover:border-sky-600 hover:bg-sky-950/20 disabled:opacity-50 disabled:cursor-not-allowed transition group text-left"
+          >
+            <div>
+              <div className="flex items-center gap-2 text-sm font-semibold text-zinc-200 group-hover:text-sky-300 transition">
+                <Send className="w-4 h-4 text-sky-400" /> Run Outreach
+              </div>
+              <p className="text-[11px] text-zinc-500 mt-1">Source leads + send cold emails now</p>
+            </div>
+            {stateIcon(outreachState) || <Play className="w-4 h-4 text-sky-400 opacity-60 group-hover:opacity-100" />}
+          </button>
+
+          {/* Empire */}
+          <button
+            onClick={runEmpire}
+            disabled={empireState === 'running'}
+            className="flex items-center justify-between gap-3 px-5 py-4 rounded-xl bg-zinc-900 border border-zinc-700 hover:border-emerald-600 hover:bg-emerald-950/20 disabled:opacity-50 disabled:cursor-not-allowed transition group text-left"
+          >
+            <div>
+              <div className="flex items-center gap-2 text-sm font-semibold text-zinc-200 group-hover:text-emerald-300 transition">
+                <Cpu className="w-4 h-4 text-emerald-400" /> Full Empire Cycle
+              </div>
+              <p className="text-[11px] text-zinc-500 mt-1">Fire all 76 agents — scout, pitch & build</p>
+            </div>
+            {stateIcon(empireState) || <Play className="w-4 h-4 text-emerald-400 opacity-60 group-hover:opacity-100" />}
+          </button>
+        </div>
+
+        {/* Live output */}
+        {controlLog.length > 0 && (
+          <div
+            ref={controlLogRef}
+            className="mt-2 h-36 overflow-y-auto bg-zinc-950 border border-zinc-800 rounded-lg p-3 font-mono text-[11px] text-zinc-400 space-y-0.5"
+          >
+            {controlLog.map((line, i) => (
+              <div key={i} className={line.includes('CRASH') || line.includes('error') ? 'text-red-400' : line.includes('complete') || line.includes('done') ? 'text-emerald-400' : ''}>
+                {line}
+              </div>
+            ))}
+          </div>
+        )}
+
+        <p className="text-[11px] text-zinc-600">
+          Pipeline also auto-runs daily at 9:00 AM IST. Manual triggers above run immediately regardless of schedule.
+        </p>
+      </section>
 
       <section className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
