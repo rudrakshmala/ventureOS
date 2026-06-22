@@ -21,16 +21,49 @@ export class OutreachPipeline {
 
     this.isRunning = true
     console.log('[Pipeline] Starting daily outreach cycle')
+    
+    // Create database log
+    const runLog = await this.prisma.agentRunLog.create({
+      data: {
+        runType: 'PITCH_RUN',
+        status: 'RUNNING',
+        logs: 'Starting daily outreach cycle\n'
+      }
+    })
+
+    const appendLog = async (msg: string) => {
+      console.log(`[Pipeline] ${msg}`)
+      await this.prisma.agentRunLog.update({
+        where: { id: runLog.id },
+        data: { logs: { increment: msg + '\n' } as any } // prisma doesn't support string increment, let's query and update
+      }).catch(() => {})
+    }
+
+    const updateLogString = async (msg: string) => {
+      try {
+        const current = await this.prisma.agentRunLog.findUnique({ where: { id: runLog.id } })
+        await this.prisma.agentRunLog.update({
+          where: { id: runLog.id },
+          data: { logs: (current?.logs || '') + msg + '\n' }
+        })
+      } catch {}
+    }
 
     try {
       // Step 1: Acquire new leads
+      await updateLogString('Step 1: Acquiring new leads...')
       const newLeads = await acquireLeads(this.prisma, 20)
+      await updateLogString(`Acquired ${newLeads} leads.`)
       await memoryBus.write('pipeline', 'daily_new_leads', newLeads, 'sales')
 
       // Step 2: Check quota
       const quota = await checkQuota(this.prisma)
       if (!quota.allowed) {
-        console.log('[Pipeline] Quota exhausted — stopping')
+        await updateLogString('[Pipeline] Quota exhausted — stopping')
+        await this.prisma.agentRunLog.update({
+          where: { id: runLog.id },
+          data: { status: 'FAILED', completedAt: new Date() }
+        })
         return
       }
 
@@ -58,6 +91,7 @@ export class OutreachPipeline {
         const result = await sendEmail(this.prisma, lead.email, template, lead.id)
         
         if (result.success) {
+          await updateLogString(`Email sent successfully to ${lead.email}`)
           await this.prisma.salesLead.update({
             where: { id: lead.id },
             data: { status: 'emailed', pitchSent: template.html }
@@ -65,6 +99,8 @@ export class OutreachPipeline {
           sent++
           // Rate limit: 30 second delay between sends to avoid spam flags
           await new Promise(r => setTimeout(r, 30000))
+        } else {
+          await updateLogString(`FAILED to send email to ${lead.email}: ${result.error || 'Unknown error'}`)
         }
       }
 
@@ -85,9 +121,12 @@ export class OutreachPipeline {
         })
         const result = await sendEmail(this.prisma, lead.email, template, lead.id)
         if (result.success) {
+          await updateLogString(`Follow-up 1 sent successfully to ${lead.email}`)
           await this.prisma.salesLead.update({ where: { id: lead.id }, data: { status: 'follow_up_1' } })
           sent++
           await new Promise(r => setTimeout(r, 30000))
+        } else {
+          await updateLogString(`FAILED to send Follow-up 1 to ${lead.email}: ${result.error || 'Unknown error'}`)
         }
       }
 
@@ -108,9 +147,12 @@ export class OutreachPipeline {
         })
         const result = await sendEmail(this.prisma, lead.email, template, lead.id)
         if (result.success) {
+          await updateLogString(`Follow-up 2 sent successfully to ${lead.email}`)
           await this.prisma.salesLead.update({ where: { id: lead.id }, data: { status: 'follow_up_2' } })
           sent++
           await new Promise(r => setTimeout(r, 30000))
+        } else {
+          await updateLogString(`FAILED to send Follow-up 2 to ${lead.email}: ${result.error || 'Unknown error'}`)
         }
       }
 
@@ -118,8 +160,29 @@ export class OutreachPipeline {
       const stats = await this.getStats()
       await memoryBus.write('pipeline', 'daily_stats', stats, 'executive')
       
-      console.log(`[Pipeline] Cycle complete — sent ${sent} emails`)
+      const completeMsg = `[Pipeline] Cycle complete — sent ${sent} emails`
+      console.log(completeMsg)
+      await updateLogString(completeMsg)
 
+      await this.prisma.agentRunLog.update({
+        where: { id: runLog.id },
+        data: { 
+          status: 'SUCCESS', 
+          pitchesSent: sent, 
+          completedAt: new Date() 
+        }
+      })
+
+    } catch (error: any) {
+      console.error('[Pipeline Error]', error)
+      await updateLogString(`CRASH: ${error.message || error}`)
+      await this.prisma.agentRunLog.update({
+        where: { id: runLog.id },
+        data: { 
+          status: 'FAILED', 
+          completedAt: new Date() 
+        }
+      }).catch(() => {})
     } finally {
       this.isRunning = false
     }
