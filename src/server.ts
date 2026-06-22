@@ -986,10 +986,99 @@ app.post('/api/v1/intake', async (req, res) => {
       console.warn('[MemoryBus] setProjectContext failed (non-fatal):', memErr)
     }
 
+    // ─── AI AUTOMATED QUOTING ───
+    // Let the response return to the client immediately so they aren't waiting on the LLM
     res.json({ projectId: project.id, message: 'Brief received - we will be in touch within 2 hours' })
+
+    // Process the quote asynchronously
+    setImmediate(async () => {
+      try {
+        console.log(`[Intake] Processing automated quote for ${email}...`);
+        const { closingAgent } = await import('./mastra/agents/closing.js');
+        const { sendEmail } = await import('./outreach/email/sender.js');
+        
+        const prompt = `Client Name: ${name || 'Valued Client'}
+Company: ${company || 'Unknown'}
+Project Brief: ${brief}
+Budget Indication: ${budget || 'Not specified'}
+
+Analyze this brief and generate a full proposal and price quote in HTML format, including the WhatsApp contact instructions as specified in your system prompt.`;
+
+        const aiRes = await closingAgent.generate(prompt);
+        let text = aiRes.text;
+        
+        // Ensure valid JSON
+        if (text.includes('\`\`\`json')) {
+          text = text.split('\`\`\`json')[1].split('\`\`\`')[0];
+        } else if (text.includes('\`\`\`')) {
+          text = text.split('\`\`\`')[1].split('\`\`\`')[0];
+        }
+        
+        const quoteData = JSON.parse(text.trim());
+        const quotedPriceInr = quoteData.quotedPriceUsd * 8500; // rough USD to INR paise conversion (assuming 1 USD = 85 INR)
+
+        // 1. Update Project
+        await prisma.salesProject.update({
+          where: { id: project.id },
+          data: { 
+            priceQuoted: quotedPriceInr, 
+            status: 'scoping' 
+          }
+        });
+
+        // 2. Create Deal
+        // We need a dummy lead to attach the deal if it doesn't exist
+        let lead = await prisma.salesLead.findUnique({ where: { email } });
+        if (!lead) {
+          lead = await prisma.salesLead.create({
+            data: {
+              email,
+              name: name || null,
+              company: company || null,
+              source: 'inbound_website',
+              status: 'replied'
+            }
+          });
+        }
+        
+        await prisma.deal.create({
+          data: {
+            leadId: lead.id,
+            title: quoteData.proposalTitle || `${name || company || email} Project`,
+            value: quoteData.quotedPriceUsd,
+            currency: 'USD',
+            status: 'NEGOTIATING',
+            proposalText: quoteData.proposalHtml
+          }
+        });
+
+        // 3. Send Email
+        const emailResult = await sendEmail(
+          prisma,
+          email,
+          {
+            subject: quoteData.closingEmailSubject || 'Your Project Proposal from VentureOS',
+            html: quoteData.closingEmailHtml || quoteData.proposalHtml,
+            text: 'Please view this email in an HTML compatible client.' // Fallback
+          }
+        );
+
+        if (emailResult.success) {
+          console.log(`[Intake] Successfully sent quote email to ${email}`);
+        } else {
+          console.error(`[Intake] Failed to send quote email:`, emailResult.error);
+        }
+
+      } catch (asyncErr) {
+        console.error('[Intake Async Quoting Error]', asyncErr);
+      }
+    });
+
   } catch (err: any) {
     console.error('[intake] Error:', err)
-    res.status(500).json({ error: 'Internal server error. Please try again.' })
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Internal server error. Please try again.' })
+    }
   }
 })
 
